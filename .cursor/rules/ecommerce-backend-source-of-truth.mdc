@@ -1,0 +1,16 @@
+---
+description: Deployed ecommerce backend is this NileTechno API repo — apply all API changes here
+alwaysApply: true
+---
+
+# Deployed ecommerce backend (source of truth)
+
+This workspace (`D:\Nile Techno\Projects\Dashboard\my backend`, NileTechno API) is the **deployed** ecommerce backend (Render: `niletechno-api`).
+
+When Abdullah asks to change the ecommerce backend, dashboard API, shop API, auth, products, orders, stock, or related server code:
+
+- Implement it **in this repo** (`src/NileTechno.API`, `Application`, `Domain`, `Infrastructure`).
+- Do **not** apply the same change in `ecommerce-backend` or any other duplicate backend folder unless he explicitly asks to sync that copy.
+- Treat other ecommerce backend folders as local/experimental; they are not production.
+
+If a request is opened from another backend workspace, move work here (or tell him to open this repo) before editing.
