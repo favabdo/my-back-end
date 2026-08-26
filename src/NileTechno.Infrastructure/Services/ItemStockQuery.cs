@@ -405,12 +405,48 @@ public class ItemStockQuery : IItemStockQuery
         if (items.Count == 0)
             return;
 
-        var prices = await GetPricesByItemIdAsync(items.Select(x => x.ItemCode), cancellationToken);
-        foreach (var item in items)
+        try
         {
-            if (prices.TryGetValue(item.ItemCode, out var price))
-                item.Price = price;
+            var prices = await GetPricesByItemIdAsync(items.Select(x => x.ItemCode), cancellationToken);
+            foreach (var item in items)
+            {
+                if (TryGetPrice(prices, item.ItemCode, out var price))
+                    item.Price = price;
+            }
         }
+        catch (Exception)
+        {
+            // Catalog should still load if the price table is unavailable.
+        }
+    }
+
+    private static bool TryGetPrice(
+        Dictionary<string, decimal> prices,
+        string itemCode,
+        out decimal price)
+    {
+        price = 0;
+        if (string.IsNullOrWhiteSpace(itemCode))
+            return false;
+
+        var trimmed = itemCode.Trim();
+        if (prices.TryGetValue(trimmed, out price))
+            return true;
+
+        var normalized = NormalizeItemKey(trimmed);
+        if (!string.Equals(normalized, trimmed, StringComparison.OrdinalIgnoreCase)
+            && prices.TryGetValue(normalized, out price))
+            return true;
+
+        return false;
+    }
+
+    private static string NormalizeItemKey(string value)
+    {
+        var trimmed = value.Trim();
+        if (trimmed.Length > 1 && trimmed.All(char.IsDigit))
+            return trimmed.TrimStart('0') is { Length: > 0 } stripped ? stripped : "0";
+        return trimmed;
     }
 
     private async Task<Dictionary<string, decimal>> GetPricesByItemIdAsync(
@@ -430,17 +466,34 @@ public class ItemStockQuery : IItemStockQuery
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(cancellationToken);
 
+        var extraIdColumns = await GetWhItemsCodeColumnsAsync(connection, cancellationToken);
+
         const int batchSize = 200;
         for (var offset = 0; offset < codes.Count; offset += batchSize)
         {
             var batch = codes.Skip(offset).Take(batchSize).ToList();
             var paramNames = batch.Select((_, index) => $"@itemId{index}").ToArray();
+            var valuesSql = string.Join(", ", paramNames.Select(name => $"({name})"));
+            var extraJoin = string.Concat(extraIdColumns.Select(column => $"""
+                  OR LTRIM(RTRIM(CONVERT(nvarchar(100), i.[{column}]))) = LTRIM(RTRIM(c.Code))
+                  OR (
+                        TRY_CONVERT(decimal(28, 8), LTRIM(RTRIM(CONVERT(nvarchar(100), i.[{column}]))))
+                      = TRY_CONVERT(decimal(28, 8), LTRIM(RTRIM(c.Code)))
+                     )
+                """));
+
             var sql = $"""
                 SELECT
-                    LTRIM(RTRIM(CONVERT(nvarchar(100), ID))) AS id,
-                    Pkg1Price5 AS price
-                FROM dbo.wh_Items
-                WHERE LTRIM(RTRIM(CONVERT(nvarchar(100), ID))) IN ({string.Join(", ", paramNames)})
+                    LTRIM(RTRIM(c.Code)) AS id,
+                    i.Pkg1Price5 AS price
+                FROM (VALUES {valuesSql}) AS c(Code)
+                INNER JOIN dbo.wh_Items AS i
+                  ON LTRIM(RTRIM(CONVERT(nvarchar(100), i.ID))) = LTRIM(RTRIM(c.Code))
+                  OR (
+                        TRY_CONVERT(decimal(28, 8), LTRIM(RTRIM(CONVERT(nvarchar(100), i.ID))))
+                      = TRY_CONVERT(decimal(28, 8), LTRIM(RTRIM(c.Code)))
+                     )
+                {extraJoin}
                 """;
 
             await using var command = CreateCommand(connection, sql);
@@ -458,11 +511,66 @@ public class ItemStockQuery : IItemStockQuery
                 var id = ReadString(reader, "id");
                 if (string.IsNullOrWhiteSpace(id))
                     continue;
-                prices[id] = ReadDecimal(reader, "price");
+                var price = ReadDecimal(reader, "price");
+                prices[id] = price;
+                prices[NormalizeItemKey(id)] = price;
             }
         }
 
         return prices;
+    }
+
+    private static readonly string[] PossibleItemCodeColumns = ["ItemCode", "itemcode", "Code", "ItemID"];
+    private static IReadOnlyList<string>? _whItemsCodeColumns;
+    private static readonly object CodeColumnsLock = new();
+
+    private async Task<List<string>> GetWhItemsCodeColumnsAsync(
+        SqlConnection connection,
+        CancellationToken cancellationToken)
+    {
+        if (_whItemsCodeColumns is not null)
+            return _whItemsCodeColumns.ToList();
+
+        lock (CodeColumnsLock)
+        {
+            if (_whItemsCodeColumns is not null)
+                return _whItemsCodeColumns.ToList();
+        }
+
+        try
+        {
+            const string sql = """
+                SELECT COLUMN_NAME
+                FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE TABLE_NAME = 'wh_Items'
+                """;
+
+            var found = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            await using var command = CreateCommand(connection, sql);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var name = Convert.ToString(reader.GetValue(0))?.Trim();
+                if (!string.IsNullOrWhiteSpace(name))
+                    found.Add(name);
+            }
+
+            var columns = PossibleItemCodeColumns
+                .Where(found.Contains)
+                .Where(name => !string.Equals(name, "ID", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            lock (CodeColumnsLock)
+                _whItemsCodeColumns = columns;
+
+            return columns;
+        }
+        catch
+        {
+            lock (CodeColumnsLock)
+                _whItemsCodeColumns = Array.Empty<string>();
+            return [];
+        }
     }
 
     private static IReadOnlyList<CustomerProductCardDto> AggregateCustomer(
