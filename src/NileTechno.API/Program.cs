@@ -11,6 +11,10 @@ EnvFile.Load();
 
 var builder = WebApplication.CreateBuilder(args);
 
+var listenPort = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrWhiteSpace(listenPort))
+    builder.WebHost.UseUrls($"http://0.0.0.0:{listenPort}");
+
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
