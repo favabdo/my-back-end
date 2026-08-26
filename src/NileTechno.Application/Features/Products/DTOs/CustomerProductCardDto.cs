@@ -7,4 +7,5 @@ public class CustomerProductCardDto
     public string GroupId { get; init; } = string.Empty;
     public string GroupName { get; init; } = string.Empty;
     public decimal Stock { get; init; }
+    public decimal Price { get; set; }
 }

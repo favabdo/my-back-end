@@ -56,7 +56,9 @@ public class ItemStockQuery : IItemStockQuery
         if (IsStoredProcedure)
         {
             var rows = await LoadProcedureRowsAsync(cancellationToken);
-            return AggregateCustomer(rows, groupId, search, itemCode: null);
+            var items = AggregateCustomer(rows, groupId, search, itemCode: null).ToList();
+            await AttachCustomerPricesAsync(items, cancellationToken);
+            return items;
         }
 
         const string sql = """
@@ -83,7 +85,9 @@ public class ItemStockQuery : IItemStockQuery
         await using var command = CreateCommand(connection, string.Format(sql, _objectName, _joinSql));
         AddFilterParameters(command, groupId, storeCode: null, search, itemCode: null);
 
-        return await ReadCustomerListAsync(command, cancellationToken);
+        var sqlItems = (await ReadCustomerListAsync(command, cancellationToken)).ToList();
+        await AttachCustomerPricesAsync(sqlItems, cancellationToken);
+        return sqlItems;
     }
 
     public async Task<PaginatedList<CustomerProductCardDto>> GetCustomerCatalogPageAsync(
@@ -104,6 +108,7 @@ public class ItemStockQuery : IItemStockQuery
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .ToList();
+            await AttachCustomerPricesAsync(items, cancellationToken);
             return new PaginatedList<CustomerProductCardDto>(items, count, page, pageSize);
         }
 
@@ -152,6 +157,7 @@ public class ItemStockQuery : IItemStockQuery
         dataCommand.Parameters.Add(new SqlParameter("@take", SqlDbType.Int) { Value = pageSize });
 
         var pageItems = (await ReadCustomerListAsync(dataCommand, cancellationToken)).ToList();
+        await AttachCustomerPricesAsync(pageItems, cancellationToken);
         return new PaginatedList<CustomerProductCardDto>(pageItems, totalCount, page, pageSize);
     }
 
@@ -165,7 +171,10 @@ public class ItemStockQuery : IItemStockQuery
         if (IsStoredProcedure)
         {
             var rows = await LoadProcedureRowsAsync(cancellationToken);
-            return AggregateCustomer(rows, groupId: null, search: null, itemCode).FirstOrDefault();
+            var item = AggregateCustomer(rows, groupId: null, search: null, itemCode).FirstOrDefault();
+            if (item is not null)
+                await AttachCustomerPricesAsync(new[] { item }, cancellationToken);
+            return item;
         }
 
         const string sql = """
@@ -186,7 +195,8 @@ public class ItemStockQuery : IItemStockQuery
         await using var command = CreateCommand(connection, string.Format(sql, _objectName, _joinSql));
         AddFilterParameters(command, groupId: null, storeCode: null, search: null, itemCode);
 
-        var list = await ReadCustomerListAsync(command, cancellationToken);
+        var list = (await ReadCustomerListAsync(command, cancellationToken)).ToList();
+        await AttachCustomerPricesAsync(list, cancellationToken);
         return list.FirstOrDefault();
     }
 
@@ -386,6 +396,73 @@ public class ItemStockQuery : IItemStockQuery
         }
 
         return rows;
+    }
+
+    private async Task AttachCustomerPricesAsync(
+        IList<CustomerProductCardDto> items,
+        CancellationToken cancellationToken)
+    {
+        if (items.Count == 0)
+            return;
+
+        var prices = await GetPricesByItemIdAsync(items.Select(x => x.ItemCode), cancellationToken);
+        foreach (var item in items)
+        {
+            if (prices.TryGetValue(item.ItemCode, out var price))
+                item.Price = price;
+        }
+    }
+
+    private async Task<Dictionary<string, decimal>> GetPricesByItemIdAsync(
+        IEnumerable<string> itemCodes,
+        CancellationToken cancellationToken)
+    {
+        var codes = itemCodes
+            .Where(code => !string.IsNullOrWhiteSpace(code))
+            .Select(code => code.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var prices = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+        if (codes.Count == 0)
+            return prices;
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        const int batchSize = 200;
+        for (var offset = 0; offset < codes.Count; offset += batchSize)
+        {
+            var batch = codes.Skip(offset).Take(batchSize).ToList();
+            var paramNames = batch.Select((_, index) => $"@itemId{index}").ToArray();
+            var sql = $"""
+                SELECT
+                    LTRIM(RTRIM(CONVERT(nvarchar(100), ID))) AS id,
+                    Pkg1Price5 AS price
+                FROM dbo.wh_Items
+                WHERE LTRIM(RTRIM(CONVERT(nvarchar(100), ID))) IN ({string.Join(", ", paramNames)})
+                """;
+
+            await using var command = CreateCommand(connection, sql);
+            for (var i = 0; i < batch.Count; i++)
+            {
+                command.Parameters.Add(new SqlParameter(paramNames[i], SqlDbType.NVarChar, 100)
+                {
+                    Value = batch[i]
+                });
+            }
+
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var id = ReadString(reader, "id");
+                if (string.IsNullOrWhiteSpace(id))
+                    continue;
+                prices[id] = ReadDecimal(reader, "price");
+            }
+        }
+
+        return prices;
     }
 
     private static IReadOnlyList<CustomerProductCardDto> AggregateCustomer(
