@@ -17,9 +17,7 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
-        var connectionString = SqlConnectionString.Normalize(
-            configuration.GetConnectionString("DefaultConnection")
-            ?? throw new InvalidOperationException("DB_CONNECTION is missing from .env"));
+        var connectionString = SqlConnectionString.Resolve(configuration);
 
         services.AddDataProtection()
             .SetApplicationName("NileTechno.API")
@@ -27,10 +25,7 @@ public static class DependencyInjection
 
         services.AddDbContext<ApplicationDbContext>(options =>
             options.UseSqlServer(connectionString, sql =>
-            {
-                sql.MigrationsAssembly(typeof(ApplicationDbContext).Assembly.FullName);
-                sql.EnableRetryOnFailure(3);
-            }));
+                sql.MigrationsAssembly(typeof(ApplicationDbContext).Assembly.FullName)));
 
         services.AddIdentity<ApplicationUser, IdentityRole<Guid>>(options =>
             {

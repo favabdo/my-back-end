@@ -22,9 +22,7 @@ public class ItemStockQuery : IItemStockQuery
 
     public ItemStockQuery(IConfiguration configuration)
     {
-        _connectionString = SqlConnectionString.Normalize(
-            configuration.GetConnectionString("DefaultConnection")
-            ?? throw new InvalidOperationException("DB_CONNECTION is missing from .env"));
+        _connectionString = SqlConnectionString.Resolve(configuration);
 
         var section = configuration.GetSection("StockCatalog");
         _objectName = section["ObjectName"] ?? "dbo.wh_ItemStockWatcherNew";
