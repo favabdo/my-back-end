@@ -91,10 +91,11 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy(CorsPolicy, policy =>
     {
-        policy.WithOrigins(corsOrigins)
+        // Browser calls come from Vercel (and preview URLs that change every deploy).
+        // Auth uses Authorization header, not cookies, so credentials are not required.
+        policy.AllowAnyOrigin()
               .AllowAnyHeader()
-              .AllowAnyMethod()
-              .AllowCredentials();
+              .AllowAnyMethod();
     });
 });
 
