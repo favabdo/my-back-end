@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
 using NileTechno.API.Middleware;
 using NileTechno.Application;
@@ -80,18 +81,44 @@ builder.Services.AddAuthorization();
 
 const string CorsPolicy = "AllowFrontend";
 var corsOrigins = (Environment.GetEnvironmentVariable("CORS_ALLOWED_ORIGINS") ?? "")
-    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+    .Select(origin => origin.TrimEnd('/'))
+    .Where(origin => origin.Length > 0)
+    .ToArray();
 if (corsOrigins.Length == 0)
-    corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
+    corsOrigins = (builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>())
+        .Select(origin => origin.TrimEnd('/'))
+        .ToArray();
+
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 builder.Services.AddCors(options =>
 {
     options.AddPolicy(CorsPolicy, policy =>
     {
-        policy.WithOrigins(corsOrigins)
-              .AllowAnyHeader()
-              .AllowAnyMethod()
-              .AllowCredentials();
+        policy.SetIsOriginAllowed(origin =>
+            {
+                if (string.IsNullOrWhiteSpace(origin))
+                    return false;
+
+                var normalized = origin.TrimEnd('/');
+                if (corsOrigins.Contains(normalized, StringComparer.OrdinalIgnoreCase))
+                    return true;
+
+                // Vercel preview URLs change every deploy; allow the project's vercel.app hosts.
+                return corsOrigins.Any(allowed =>
+                    allowed.Contains("vercel.app", StringComparison.OrdinalIgnoreCase)
+                    && normalized.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+                    && normalized.EndsWith(".vercel.app", StringComparison.OrdinalIgnoreCase));
+            })
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
     });
 });
 
@@ -104,13 +131,9 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseMiddleware<ExceptionHandlingMiddleware>();
-
-if (!app.Environment.IsDevelopment())
-{
-    app.UseHttpsRedirection();
-}
-
+app.UseForwardedHeaders();
 app.UseCors(CorsPolicy);
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
