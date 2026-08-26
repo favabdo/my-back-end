@@ -1,11 +1,12 @@
 using MediatR;
 using NileTechno.Application.Common.Interfaces;
+using NileTechno.Application.Common.Models;
 using NileTechno.Application.Features.Products.DTOs;
 
 namespace NileTechno.Application.Features.Products.Queries.GetCustomerProducts;
 
 public class GetCustomerProductsQueryHandler
-    : IRequestHandler<GetCustomerProductsQuery, IReadOnlyList<CustomerProductCardDto>>
+    : IRequestHandler<GetCustomerProductsQuery, PaginatedList<CustomerProductCardDto>>
 {
     private readonly IItemStockQuery _itemStockQuery;
 
@@ -14,8 +15,12 @@ public class GetCustomerProductsQueryHandler
         _itemStockQuery = itemStockQuery;
     }
 
-    public Task<IReadOnlyList<CustomerProductCardDto>> Handle(
+    public Task<PaginatedList<CustomerProductCardDto>> Handle(
         GetCustomerProductsQuery request,
         CancellationToken cancellationToken)
-        => _itemStockQuery.GetCustomerCatalogAsync(request.GroupId, request.Search, cancellationToken);
+        => _itemStockQuery.GetCustomerCatalogPageAsync(
+            request.GroupId,
+            request.Search,
+            request.Page,
+            cancellationToken);
 }

@@ -13,6 +13,12 @@ public interface IItemStockQuery
         string? search,
         CancellationToken cancellationToken = default);
 
+    Task<PaginatedList<CustomerProductCardDto>> GetCustomerCatalogPageAsync(
+        string? groupId,
+        string? search,
+        int pageNumber,
+        CancellationToken cancellationToken = default);
+
     Task<CustomerProductCardDto?> GetCustomerProductByCodeAsync(
         string itemCode,
         CancellationToken cancellationToken = default);

@@ -86,6 +86,75 @@ public class ItemStockQuery : IItemStockQuery
         return await ReadCustomerListAsync(command, cancellationToken);
     }
 
+    public async Task<PaginatedList<CustomerProductCardDto>> GetCustomerCatalogPageAsync(
+        string? groupId,
+        string? search,
+        int pageNumber,
+        CancellationToken cancellationToken = default)
+    {
+        const int pageSize = 50;
+        var page = pageNumber < 1 ? 1 : pageNumber;
+
+        if (IsStoredProcedure)
+        {
+            var rows = await LoadProcedureRowsAsync(cancellationToken);
+            var all = AggregateCustomer(rows, groupId, search, itemCode: null);
+            var count = all.Count;
+            var items = all
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+            return new PaginatedList<CustomerProductCardDto>(items, count, page, pageSize);
+        }
+
+        var fromSql = $"""
+            FROM {_objectName} AS a
+            {_joinSql}
+            WHERE (@groupId IS NULL OR CONVERT(nvarchar(100), a.groupid) = @groupId)
+              AND (
+                    @search IS NULL
+                    OR a.itemname LIKE @search
+                    OR CONVERT(nvarchar(100), a.itemcode) LIKE @search
+                  )
+            """;
+
+        var countSql = $"""
+            SELECT COUNT(*) FROM (
+                SELECT a.itemcode
+                {fromSql}
+                GROUP BY a.itemcode
+            ) AS catalog_groups
+            """;
+
+        var dataSql = $"""
+            SELECT
+                MAX(a.itemcode) AS itemcode,
+                MAX(a.itemname) AS itemname,
+                MAX(a.groupid) AS groupid,
+                MAX(a.groupname) AS groupname,
+                SUM(a.transpkgqty1) AS stock
+            {fromSql}
+            GROUP BY a.itemcode
+            ORDER BY MAX(a.itemname)
+            OFFSET @skip ROWS FETCH NEXT @take ROWS ONLY
+            """;
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        await using var countCommand = CreateCommand(connection, countSql);
+        AddFilterParameters(countCommand, groupId, storeCode: null, search, itemCode: null);
+        var totalCount = Convert.ToInt32(await countCommand.ExecuteScalarAsync(cancellationToken));
+
+        await using var dataCommand = CreateCommand(connection, dataSql);
+        AddFilterParameters(dataCommand, groupId, storeCode: null, search, itemCode: null);
+        dataCommand.Parameters.Add(new SqlParameter("@skip", SqlDbType.Int) { Value = (page - 1) * pageSize });
+        dataCommand.Parameters.Add(new SqlParameter("@take", SqlDbType.Int) { Value = pageSize });
+
+        var pageItems = (await ReadCustomerListAsync(dataCommand, cancellationToken)).ToList();
+        return new PaginatedList<CustomerProductCardDto>(pageItems, totalCount, page, pageSize);
+    }
+
     public async Task<CustomerProductCardDto?> GetCustomerProductByCodeAsync(
         string itemCode,
         CancellationToken cancellationToken = default)
@@ -132,7 +201,8 @@ public class ItemStockQuery : IItemStockQuery
                 .Select(g => new ProductGroupDto
                 {
                     GroupId = g.Key,
-                    GroupName = g.Select(x => x.GroupName).FirstOrDefault(n => !string.IsNullOrWhiteSpace(n)) ?? string.Empty
+                    GroupName = g.Select(x => x.GroupName).FirstOrDefault(n => !string.IsNullOrWhiteSpace(n)) ?? string.Empty,
+                    ItemCount = g.Select(x => x.ItemCode).Distinct(StringComparer.OrdinalIgnoreCase).Count()
                 })
                 .OrderBy(g => g.GroupName)
                 .ToList();
@@ -141,7 +211,8 @@ public class ItemStockQuery : IItemStockQuery
         const string sql = """
             SELECT
                 MAX(a.groupid) AS groupid,
-                MAX(a.groupname) AS groupname
+                MAX(a.groupname) AS groupname,
+                COUNT(DISTINCT a.itemcode) AS itemcount
             FROM {0} AS a
             {1}
             WHERE a.groupid IS NOT NULL
@@ -160,7 +231,8 @@ public class ItemStockQuery : IItemStockQuery
             groups.Add(new ProductGroupDto
             {
                 GroupId = ReadString(reader, "groupid"),
-                GroupName = ReadString(reader, "groupname")
+                GroupName = ReadString(reader, "groupname"),
+                ItemCount = (int)ReadDecimal(reader, "itemcount")
             });
         }
 

@@ -9,10 +9,13 @@ public class ProductsController : ApiControllerBase
 {
     [AllowAnonymous]
     [HttpGet]
-    public async Task<IActionResult> Get([FromQuery] string? groupId, [FromQuery] string? search)
+    public async Task<IActionResult> Get(
+        [FromQuery] string? groupId,
+        [FromQuery] string? search,
+        [FromQuery] int page = 1)
     {
-        var items = await Mediator.Send(new GetCustomerProductsQuery(groupId, search));
-        return Ok(items);
+        var result = await Mediator.Send(new GetCustomerProductsQuery(groupId, search, page));
+        return Ok(result);
     }
 
     [AllowAnonymous]
