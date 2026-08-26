@@ -1,6 +1,5 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
 using NileTechno.API.Middleware;
 using NileTechno.Application;
@@ -86,39 +85,16 @@ var corsOrigins = (Environment.GetEnvironmentVariable("CORS_ALLOWED_ORIGINS") ??
     .Where(origin => origin.Length > 0)
     .ToArray();
 if (corsOrigins.Length == 0)
-    corsOrigins = (builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>())
-        .Select(origin => origin.TrimEnd('/'))
-        .ToArray();
-
-builder.Services.Configure<ForwardedHeadersOptions>(options =>
-{
-    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    options.KnownNetworks.Clear();
-    options.KnownProxies.Clear();
-});
+    corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? Array.Empty<string>();
 
 builder.Services.AddCors(options =>
 {
     options.AddPolicy(CorsPolicy, policy =>
     {
-        policy.SetIsOriginAllowed(origin =>
-            {
-                if (string.IsNullOrWhiteSpace(origin))
-                    return false;
-
-                var normalized = origin.TrimEnd('/');
-                if (corsOrigins.Contains(normalized, StringComparer.OrdinalIgnoreCase))
-                    return true;
-
-                // Vercel preview URLs change every deploy; allow the project's vercel.app hosts.
-                return corsOrigins.Any(allowed =>
-                    allowed.Contains("vercel.app", StringComparison.OrdinalIgnoreCase)
-                    && normalized.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
-                    && normalized.EndsWith(".vercel.app", StringComparison.OrdinalIgnoreCase));
-            })
-            .AllowAnyHeader()
-            .AllowAnyMethod()
-            .AllowCredentials();
+        policy.WithOrigins(corsOrigins)
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials();
     });
 });
 
@@ -131,9 +107,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseMiddleware<ExceptionHandlingMiddleware>();
-app.UseForwardedHeaders();
 app.UseCors(CorsPolicy);
-
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
