@@ -6,6 +6,7 @@ using NileTechno.Application.Common.Interfaces;
 using NileTechno.Application.Common.Models;
 using NileTechno.Application.Features.Products.DTOs;
 using NileTechno.Application.Features.Stock.DTOs;
+using NileTechno.Infrastructure.Configuration;
 
 namespace NileTechno.Infrastructure.Services;
 
@@ -21,8 +22,9 @@ public class ItemStockQuery : IItemStockQuery
 
     public ItemStockQuery(IConfiguration configuration)
     {
-        _connectionString = configuration.GetConnectionString("DefaultConnection")
-            ?? throw new InvalidOperationException("DB_CONNECTION is missing from .env");
+        _connectionString = SqlConnectionString.Normalize(
+            configuration.GetConnectionString("DefaultConnection")
+            ?? throw new InvalidOperationException("DB_CONNECTION is missing from .env"));
 
         var section = configuration.GetSection("StockCatalog");
         _objectName = section["ObjectName"] ?? "dbo.wh_ItemStockWatcherNew";

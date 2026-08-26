@@ -10,8 +10,9 @@ public class ApplicationDbContextFactory : IDesignTimeDbContextFactory<Applicati
     {
         EnvFile.Load();
 
-        var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
-            ?? throw new InvalidOperationException($"{EnvFile.Connection} is missing. Copy .env.example to .env.");
+        var connectionString = SqlConnectionString.Normalize(
+            Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
+            ?? throw new InvalidOperationException($"{EnvFile.Connection} is missing. Copy .env.example to .env."));
 
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseSqlServer(connectionString, sql =>

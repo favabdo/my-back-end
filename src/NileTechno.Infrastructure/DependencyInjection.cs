@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using NileTechno.Application.Common.Interfaces;
+using NileTechno.Infrastructure.Configuration;
 using NileTechno.Infrastructure.Identity;
 using NileTechno.Infrastructure.Persistence;
 using NileTechno.Infrastructure.Repositories;
@@ -15,8 +16,9 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
-        var connectionString = configuration.GetConnectionString("DefaultConnection")
-            ?? throw new InvalidOperationException("DB_CONNECTION is missing from .env");
+        var connectionString = SqlConnectionString.Normalize(
+            configuration.GetConnectionString("DefaultConnection")
+            ?? throw new InvalidOperationException("DB_CONNECTION is missing from .env"));
 
         services.AddDbContext<ApplicationDbContext>(options =>
             options.UseSqlServer(connectionString, sql =>

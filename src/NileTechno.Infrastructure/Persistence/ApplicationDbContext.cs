@@ -132,5 +132,10 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
         {
             e.Property(i => i.Price).HasColumnType("decimal(18,2)");
         });
+
+        builder.Entity<StoreSettings>(e =>
+        {
+            e.Property(s => s.FreeShippingMin).HasColumnType("decimal(18,2)");
+        });
     }
 }
