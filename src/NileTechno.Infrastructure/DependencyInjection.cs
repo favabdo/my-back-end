@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -20,9 +21,16 @@ public static class DependencyInjection
             configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("DB_CONNECTION is missing from .env"));
 
+        services.AddDataProtection()
+            .SetApplicationName("NileTechno.API")
+            .UseEphemeralDataProtectionProvider();
+
         services.AddDbContext<ApplicationDbContext>(options =>
             options.UseSqlServer(connectionString, sql =>
-                sql.MigrationsAssembly(typeof(ApplicationDbContext).Assembly.FullName)));
+            {
+                sql.MigrationsAssembly(typeof(ApplicationDbContext).Assembly.FullName);
+                sql.EnableRetryOnFailure(3);
+            }));
 
         services.AddIdentity<ApplicationUser, IdentityRole<Guid>>(options =>
             {

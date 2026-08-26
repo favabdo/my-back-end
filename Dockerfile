@@ -15,8 +15,6 @@ RUN dotnet publish src/NileTechno.API/NileTechno.API.csproj -c Release -o /app/p
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
 WORKDIR /app
 COPY --from=build /app/publish .
-COPY docker/openssl.cnf /app/openssl.cnf
-ENV OPENSSL_CONF=/app/openssl.cnf
 ENV DOTNET_HOSTBUILDER_RELOADCONFIGONCHANGE=false
 ENV DOTNET_USE_POLLING_FILE_WATCHER=true
 EXPOSE 8080

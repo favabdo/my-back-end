@@ -16,6 +16,9 @@ public static class SqlConnectionString
         var trustOverride = Environment.GetEnvironmentVariable("SQL_TRUST_SERVER_CERTIFICATE");
         builder.TrustServerCertificate = !bool.TryParse(trustOverride, out var trust) || trust;
 
+        if (builder.ConnectTimeout < 30)
+            builder.ConnectTimeout = 30;
+
         return builder.ConnectionString;
     }
 }

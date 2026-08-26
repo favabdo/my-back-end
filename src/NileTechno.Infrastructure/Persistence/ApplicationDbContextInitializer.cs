@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -32,6 +33,16 @@ public class ApplicationDbContextInitializer
     {
         try
         {
+            var raw = _context.Database.GetConnectionString();
+            if (!string.IsNullOrWhiteSpace(raw))
+            {
+                var parsed = new SqlConnectionStringBuilder(raw);
+                _logger.LogInformation(
+                    "Connecting to SQL Server {DataSource} (Encrypt={Encrypt}).",
+                    parsed.DataSource,
+                    parsed.Encrypt);
+            }
+
             var pending = await _context.Database.GetPendingMigrationsAsync();
             if (pending.Any())
                 await _context.Database.MigrateAsync();
@@ -40,7 +51,10 @@ public class ApplicationDbContextInitializer
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "حصل خطأ أثناء تطبيق الـ Migrations على قاعدة البيانات.");
+            _logger.LogError(
+                ex,
+                "حصل خطأ أثناء تطبيق الـ Migrations على قاعدة البيانات. Inner: {Inner}",
+                Flatten(ex));
             throw;
         }
     }
@@ -102,5 +116,13 @@ public class ApplicationDbContextInitializer
             existingUser.EmailConfirmed = true;
             await _userManager.UpdateAsync(existingUser);
         }
+    }
+
+    private static string Flatten(Exception ex)
+    {
+        var parts = new List<string>();
+        for (var current = ex; current is not null; current = current.InnerException)
+            parts.Add(current.Message);
+        return string.Join(" => ", parts);
     }
 }
