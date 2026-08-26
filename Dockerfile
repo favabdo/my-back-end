@@ -17,5 +17,7 @@ WORKDIR /app
 COPY --from=build /app/publish .
 COPY docker/openssl.cnf /app/openssl.cnf
 ENV OPENSSL_CONF=/app/openssl.cnf
+ENV DOTNET_HOSTBUILDER_RELOADCONFIGONCHANGE=false
+ENV DOTNET_USE_POLLING_FILE_WATCHER=true
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "NileTechno.API.dll"]

@@ -9,6 +9,11 @@ using NileTechno.Infrastructure.Persistence;
 
 EnvFile.Load();
 
+// Render (and many Linux hosts) cap inotify at 128. Default config file
+// watchers exceed that and crash the process with IOException / exit 139.
+Environment.SetEnvironmentVariable("DOTNET_HOSTBUILDER_RELOADCONFIGONCHANGE", "false");
+Environment.SetEnvironmentVariable("DOTNET_USE_POLLING_FILE_WATCHER", "true");
+
 var builder = WebApplication.CreateBuilder(args);
 
 var listenPort = Environment.GetEnvironmentVariable("PORT");
