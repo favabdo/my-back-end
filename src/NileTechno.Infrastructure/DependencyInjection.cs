@@ -54,8 +54,6 @@ public static class DependencyInjection
 
         services.AddScoped<IItemStockQuery, ItemStockQuery>();
 
-        services.AddScoped<ApplicationDbContextInitializer>();
-
         return services;
     }
 }

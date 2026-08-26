@@ -26,7 +26,7 @@ public class ItemStockQuery : IItemStockQuery
 
         var section = configuration.GetSection("StockCatalog");
         _objectName = section["ObjectName"] ?? "dbo.wh_ItemStockWatcherNew";
-        _sourceKind = section["SourceKind"] ?? "TableOrView";
+        _sourceKind = section["SourceKind"] ?? "StoredProcedure";
         _joinSql = section["JoinSql"] ?? string.Empty;
         _reorderQtySql = section["ReorderQtySql"] ?? "MAX(a.ReorderQty)";
 

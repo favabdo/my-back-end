@@ -5,7 +5,6 @@ using NileTechno.API.Middleware;
 using NileTechno.Application;
 using NileTechno.Infrastructure;
 using NileTechno.Infrastructure.Configuration;
-using NileTechno.Infrastructure.Persistence;
 
 EnvFile.Load();
 
@@ -115,12 +114,5 @@ app.UseCors(CorsPolicy);
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
-
-using (var scope = app.Services.CreateScope())
-{
-    var initializer = scope.ServiceProvider.GetRequiredService<ApplicationDbContextInitializer>();
-    await initializer.InitialiseAsync();
-    await initializer.SeedAsync();
-}
 
 app.Run();
