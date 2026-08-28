@@ -64,6 +64,7 @@ public class ItemStockQuery : IItemStockQuery
         const string sql = """
             SELECT
                 MAX(a.itemcode) AS itemcode,
+                MAX(a.itemid) AS itemid,
                 MAX(a.itemname) AS itemname,
                 MAX(a.groupid) AS groupid,
                 MAX(a.groupname) AS groupname,
@@ -134,6 +135,7 @@ public class ItemStockQuery : IItemStockQuery
         var dataSql = $"""
             SELECT
                 MAX(a.itemcode) AS itemcode,
+                MAX(a.itemid) AS itemid,
                 MAX(a.itemname) AS itemname,
                 MAX(a.groupid) AS groupid,
                 MAX(a.groupname) AS groupname,
@@ -180,6 +182,7 @@ public class ItemStockQuery : IItemStockQuery
         const string sql = """
             SELECT
                 MAX(a.itemcode) AS itemcode,
+                MAX(a.itemid) AS itemid,
                 MAX(a.itemname) AS itemname,
                 MAX(a.groupid) AS groupid,
                 MAX(a.groupname) AS groupname,
@@ -386,6 +389,7 @@ public class ItemStockQuery : IItemStockQuery
         {
             rows.Add(new RawStockRow(
                 ReadString(reader, "itemcode"),
+                ReadString(reader, "itemid"),
                 ReadString(reader, "itemname"),
                 ReadDecimal(reader, "transpkgqty1"),
                 ReadDecimal(reader, "ReorderQty"),
@@ -407,10 +411,10 @@ public class ItemStockQuery : IItemStockQuery
 
         try
         {
-            var prices = await GetPricesByItemIdAsync(items.Select(x => x.ItemCode), cancellationToken);
+            var prices = await GetPricesByItemIdAsync(items.Select(x => x.ItemId), cancellationToken);
             foreach (var item in items)
             {
-                if (TryGetPrice(prices, item.ItemCode, out var price))
+                if (TryGetPrice(prices, item.ItemId, out var price))
                     item.Price = price;
             }
         }
@@ -466,34 +470,19 @@ public class ItemStockQuery : IItemStockQuery
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(cancellationToken);
 
-        var extraIdColumns = await GetWhItemsCodeColumnsAsync(connection, cancellationToken);
-
         const int batchSize = 200;
         for (var offset = 0; offset < codes.Count; offset += batchSize)
         {
             var batch = codes.Skip(offset).Take(batchSize).ToList();
             var paramNames = batch.Select((_, index) => $"@itemId{index}").ToArray();
-            var valuesSql = string.Join(", ", paramNames.Select(name => $"({name})"));
-            var extraJoin = string.Concat(extraIdColumns.Select(column => $"""
-                  OR LTRIM(RTRIM(CONVERT(nvarchar(100), i.[{column}]))) = LTRIM(RTRIM(c.Code))
-                  OR (
-                        TRY_CONVERT(decimal(28, 8), LTRIM(RTRIM(CONVERT(nvarchar(100), i.[{column}]))))
-                      = TRY_CONVERT(decimal(28, 8), LTRIM(RTRIM(c.Code)))
-                     )
-                """));
+            var inList = string.Join(", ", paramNames);
 
             var sql = $"""
                 SELECT
-                    LTRIM(RTRIM(c.Code)) AS id,
-                    i.Pkg1Price5 AS price
-                FROM (VALUES {valuesSql}) AS c(Code)
-                INNER JOIN dbo.wh_Items AS i
-                  ON LTRIM(RTRIM(CONVERT(nvarchar(100), i.ID))) = LTRIM(RTRIM(c.Code))
-                  OR (
-                        TRY_CONVERT(decimal(28, 8), LTRIM(RTRIM(CONVERT(nvarchar(100), i.ID))))
-                      = TRY_CONVERT(decimal(28, 8), LTRIM(RTRIM(c.Code)))
-                     )
-                {extraJoin}
+                    LTRIM(RTRIM(CONVERT(nvarchar(100), ID))) AS itemid,
+                    Pkg1Price5 AS price
+                FROM dbo.wh_Items
+                WHERE LTRIM(RTRIM(CONVERT(nvarchar(100), ID))) IN ({inList})
                 """;
 
             await using var command = CreateCommand(connection, sql);
@@ -508,69 +497,16 @@ public class ItemStockQuery : IItemStockQuery
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
             {
-                var id = ReadString(reader, "id");
-                if (string.IsNullOrWhiteSpace(id))
+                var itemId = ReadString(reader, "itemid");
+                if (string.IsNullOrWhiteSpace(itemId))
                     continue;
                 var price = ReadDecimal(reader, "price");
-                prices[id] = price;
-                prices[NormalizeItemKey(id)] = price;
+                prices[itemId] = price;
+                prices[NormalizeItemKey(itemId)] = price;
             }
         }
 
         return prices;
-    }
-
-    private static readonly string[] PossibleItemCodeColumns = ["ItemCode", "itemcode", "Code", "ItemID"];
-    private static IReadOnlyList<string>? _whItemsCodeColumns;
-    private static readonly object CodeColumnsLock = new();
-
-    private async Task<List<string>> GetWhItemsCodeColumnsAsync(
-        SqlConnection connection,
-        CancellationToken cancellationToken)
-    {
-        if (_whItemsCodeColumns is not null)
-            return _whItemsCodeColumns.ToList();
-
-        lock (CodeColumnsLock)
-        {
-            if (_whItemsCodeColumns is not null)
-                return _whItemsCodeColumns.ToList();
-        }
-
-        try
-        {
-            const string sql = """
-                SELECT COLUMN_NAME
-                FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE TABLE_NAME = 'wh_Items'
-                """;
-
-            var found = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            await using var command = CreateCommand(connection, sql);
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-            while (await reader.ReadAsync(cancellationToken))
-            {
-                var name = Convert.ToString(reader.GetValue(0))?.Trim();
-                if (!string.IsNullOrWhiteSpace(name))
-                    found.Add(name);
-            }
-
-            var columns = PossibleItemCodeColumns
-                .Where(found.Contains)
-                .Where(name => !string.Equals(name, "ID", StringComparison.OrdinalIgnoreCase))
-                .ToList();
-
-            lock (CodeColumnsLock)
-                _whItemsCodeColumns = columns;
-
-            return columns;
-        }
-        catch
-        {
-            lock (CodeColumnsLock)
-                _whItemsCodeColumns = Array.Empty<string>();
-            return [];
-        }
     }
 
     private static IReadOnlyList<CustomerProductCardDto> AggregateCustomer(
@@ -600,6 +536,7 @@ public class ItemStockQuery : IItemStockQuery
             .Select(g => new CustomerProductCardDto
             {
                 ItemCode = g.Key,
+                ItemId = g.Select(x => x.ItemId).FirstOrDefault(n => !string.IsNullOrWhiteSpace(n)) ?? string.Empty,
                 ItemName = g.Select(x => x.ItemName).FirstOrDefault(n => !string.IsNullOrWhiteSpace(n)) ?? string.Empty,
                 GroupId = g.Select(x => x.GroupId).FirstOrDefault(n => !string.IsNullOrWhiteSpace(n)) ?? string.Empty,
                 GroupName = g.Select(x => x.GroupName).FirstOrDefault(n => !string.IsNullOrWhiteSpace(n)) ?? string.Empty,
@@ -660,6 +597,7 @@ public class ItemStockQuery : IItemStockQuery
             items.Add(new CustomerProductCardDto
             {
                 ItemCode = ReadString(reader, "itemcode"),
+                ItemId = ReadString(reader, "itemid"),
                 ItemName = ReadString(reader, "itemname"),
                 GroupId = ReadString(reader, "groupid"),
                 GroupName = ReadString(reader, "groupname"),
@@ -713,6 +651,7 @@ public class ItemStockQuery : IItemStockQuery
 
     private sealed record RawStockRow(
         string ItemCode,
+        string ItemId,
         string ItemName,
         decimal TransPkgQty1,
         decimal ReorderQty,
