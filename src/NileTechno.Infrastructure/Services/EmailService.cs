@@ -89,7 +89,8 @@ public class EmailService : IEmailService
         return new SmtpClient(host, port)
         {
             EnableSsl = port != 25,
-            Credentials = new NetworkCredential(user, password)
+            Credentials = new NetworkCredential(user, password),
+            Timeout = 8000
         };
     }
 

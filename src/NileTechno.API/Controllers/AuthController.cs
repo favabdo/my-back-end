@@ -20,7 +20,7 @@ public class AuthController : ApiControllerBase
     {
         var result = await Mediator.Send(command);
         if (!result.Succeeded) return BadRequest(new { errors = result.Errors });
-        return Ok(new { message = "تم إنشاء الحساب بنجاح، برجاء تفعيل بريدك الإلكتروني.", userId = result.Data });
+        return Ok(new { message = "تم إنشاء الحساب بنجاح. تقدر تسجّل الدخول دلوقتي.", userId = result.Data, emailConfirmed = true });
     }
 
     [HttpPost("google")]

@@ -32,38 +32,78 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, Result<Gu
 
     public async Task<Result<Guid>> Handle(RegisterCommand request, CancellationToken cancellationToken)
     {
-        var email = EmailNormalizer.Normalize(request.Email);
-
-        if (await _loginAccounts.EmailExistsAsync(email, cancellationToken) ||
-            await _identityService.EmailExistsAsync(email))
-            return Result<Guid>.Failure("البريد الإلكتروني مستخدم بالفعل، جرّب تسجيل الدخول.");
-
-        var userId = Guid.NewGuid();
-        var createResult = await _identityService.CreateUserAsync(email, request.Password, request.FullName.Trim(), userId);
-        if (!createResult.Succeeded)
-            return Result<Guid>.Failure(createResult.Errors);
-
-        var account = new LoginAccount
+        try
         {
-            Id = userId,
-            Email = email,
-            NormalizedEmail = email,
-            FullName = request.FullName.Trim(),
-            AuthProvider = LoginAuthProvider.Password,
-            EmailConfirmed = false,
-            LoyaltyPoints = 100,
-            CreatedAt = DateTime.UtcNow
-        };
-        account.PasswordHash = _secretHasher.Hash(account, request.Password);
-        await _loginAccounts.AddAsync(account, cancellationToken);
+            var email = EmailNormalizer.Normalize(request.Email);
+            var fullName = request.FullName.Trim();
+            var existingAccount = await _loginAccounts.FindByEmailAsync(email, cancellationToken);
+            var existingIdentity = await _identityService.FindUserAsync(email);
 
-        var token = await _identityService.GenerateEmailConfirmationTokenAsync(email);
-        var clientUrl = _configuration["ClientAppUrl"] ?? "http://localhost:5173";
-        var encodedToken = Uri.EscapeDataString(token);
-        var verificationLink = $"{clientUrl}/verify-email?email={Uri.EscapeDataString(email)}&token={encodedToken}";
+            if (existingAccount is not null && existingIdentity is not null)
+                return Result<Guid>.Failure("البريد الإلكتروني مستخدم بالفعل، جرّب تسجيل الدخول.");
 
-        await _emailService.SendVerificationEmailAsync(email, request.FullName, verificationLink, cancellationToken);
+            Guid userId;
+            if (existingIdentity is not null)
+            {
+                userId = existingIdentity.UserId;
+            }
+            else
+            {
+                userId = existingAccount?.Id ?? Guid.NewGuid();
+                var createResult = await _identityService.CreateUserAsync(
+                    email, request.Password, fullName, userId, emailConfirmed: true);
+                if (!createResult.Succeeded)
+                    return Result<Guid>.Failure(createResult.Errors);
+                userId = createResult.UserId ?? userId;
+            }
 
-        return Result<Guid>.Success(userId);
+            if (existingAccount is null)
+            {
+                var account = new LoginAccount
+                {
+                    Id = userId,
+                    Email = email,
+                    NormalizedEmail = email,
+                    FullName = fullName,
+                    AuthProvider = LoginAuthProvider.Password,
+                    EmailConfirmed = true,
+                    LoyaltyPoints = 100,
+                    CreatedAt = DateTime.UtcNow
+                };
+                account.PasswordHash = _secretHasher.Hash(account, request.Password);
+                await _loginAccounts.AddAsync(account, cancellationToken);
+            }
+            else if (!existingAccount.EmailConfirmed)
+            {
+                existingAccount.EmailConfirmed = true;
+                await _loginAccounts.UpdateAsync(existingAccount, cancellationToken);
+            }
+
+            TrySendActivationEmails(email, fullName);
+            return Result<Guid>.Success(userId);
+        }
+        catch (Exception ex)
+        {
+            return Result<Guid>.Failure($"تعذر إنشاء الحساب: {ex.Message}");
+        }
+    }
+
+    private void TrySendActivationEmails(string email, string fullName)
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var token = await _identityService.GenerateEmailConfirmationTokenAsync(email);
+                var clientUrl = _configuration["ClientAppUrl"] ?? "http://localhost:5173";
+                var link = $"{clientUrl}/verify-email?email={Uri.EscapeDataString(email)}&token={Uri.EscapeDataString(token)}";
+                await _emailService.SendVerificationEmailAsync(email, fullName, link);
+                await _emailService.SendWelcomeEmailAsync(email, fullName);
+            }
+            catch
+            {
+                /* SMTP must never block or fail registration */
+            }
+        });
     }
 }

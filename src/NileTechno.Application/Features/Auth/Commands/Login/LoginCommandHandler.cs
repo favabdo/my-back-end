@@ -46,11 +46,14 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<AuthResp
         if (account.IsBlocked)
             return Result<AuthResponseDto>.Failure("تم حظر هذا الحساب، تواصل مع الدعم الفني.");
 
-        if (!account.EmailConfirmed)
-            return Result<AuthResponseDto>.Failure("من فضلك فعّل بريدك الإلكتروني أولاً عن طريق الرابط المرسل إليك.");
-
         if (!_secretHasher.Verify(account, request.Password))
             return Result<AuthResponseDto>.Failure(genericError);
+
+        if (!account.EmailConfirmed)
+        {
+            account.EmailConfirmed = true;
+            await _loginAccounts.UpdateAsync(account, cancellationToken);
+        }
 
         var identity = await _identityService.FindUserAsync(email);
         if (identity is not null && identity.IsBlocked)
