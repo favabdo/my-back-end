@@ -10,4 +10,9 @@ public class AuthResponseDto
     public string AccessToken { get; set; } = string.Empty;
     public DateTime AccessTokenExpiresAtUtc { get; set; }
     public string RefreshToken { get; set; } = string.Empty;
+
+    public int LoyaltyPoints { get; set; }
+    public string? Phone { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public string AuthProvider { get; set; } = "Password";
 }

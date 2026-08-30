@@ -11,12 +11,18 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
     private readonly IIdentityService _identityService;
     private readonly ITokenService _tokenService;
     private readonly IConfiguration _configuration;
+    private readonly ILoginAccountStore _loginAccounts;
 
-    public RefreshTokenCommandHandler(IIdentityService identityService, ITokenService tokenService, IConfiguration configuration)
+    public RefreshTokenCommandHandler(
+        IIdentityService identityService,
+        ITokenService tokenService,
+        IConfiguration configuration,
+        ILoginAccountStore loginAccounts)
     {
         _identityService = identityService;
         _tokenService = tokenService;
         _configuration = configuration;
+        _loginAccounts = loginAccounts;
     }
 
     public async Task<Result<AuthResponseDto>> Handle(RefreshTokenCommand request, CancellationToken cancellationToken)
@@ -34,6 +40,14 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
         var refreshExpiryDays = _configuration.GetSection("Jwt").GetValue<int>("RefreshTokenExpiryDays", 30);
         await _identityService.SaveRefreshTokenAsync(user.UserId, tokens.RefreshToken, DateTime.UtcNow.AddDays(refreshExpiryDays));
 
+        var account = await _loginAccounts.FindByIdAsync(user.UserId, cancellationToken);
+        if (account is not null)
+        {
+            account.RefreshToken = tokens.RefreshToken;
+            account.RefreshTokenExpiresAtUtc = DateTime.UtcNow.AddDays(refreshExpiryDays);
+            await _loginAccounts.UpdateAsync(account, cancellationToken);
+        }
+
         return Result<AuthResponseDto>.Success(new AuthResponseDto
         {
             UserId = user.UserId,
@@ -42,7 +56,11 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
             Roles = roles,
             AccessToken = tokens.AccessToken,
             AccessTokenExpiresAtUtc = tokens.AccessTokenExpiresAtUtc,
-            RefreshToken = tokens.RefreshToken
+            RefreshToken = tokens.RefreshToken,
+            LoyaltyPoints = account?.LoyaltyPoints ?? 0,
+            Phone = account?.Phone,
+            CreatedAt = account?.CreatedAt ?? DateTime.UtcNow,
+            AuthProvider = account?.AuthProvider ?? "Password"
         });
     }
 }

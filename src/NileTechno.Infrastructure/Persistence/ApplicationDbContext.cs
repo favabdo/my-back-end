@@ -30,6 +30,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
 
     public DbSet<ActivityLog> ActivityLogs => Set<ActivityLog>();
     public DbSet<StoreSettings> StoreSettingsList => Set<StoreSettings>();
+    public DbSet<LoginAccount> LoginAccounts => Set<LoginAccount>();
     public DbSet<UserAddress> UserAddresses => Set<UserAddress>();
     public DbSet<StockOverride> StockOverrides => Set<StockOverride>();
     public DbSet<AnalyticsSearch> AnalyticsSearches => Set<AnalyticsSearch>();
@@ -136,6 +137,18 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
         builder.Entity<StoreSettings>(e =>
         {
             e.Property(s => s.FreeShippingMin).HasColumnType("decimal(18,2)");
+        });
+
+        builder.Entity<LoginAccount>(e =>
+        {
+            e.ToTable("LoginAccounts_byA");
+            e.HasIndex(a => a.NormalizedEmail).IsUnique();
+            e.Property(a => a.Email).HasMaxLength(256);
+            e.Property(a => a.NormalizedEmail).HasMaxLength(256);
+            e.Property(a => a.AuthProvider).HasMaxLength(32);
+            e.Property(a => a.GoogleSubject).HasMaxLength(128);
+            e.Property(a => a.FullName).HasMaxLength(200);
+            e.Property(a => a.Phone).HasMaxLength(32);
         });
     }
 }

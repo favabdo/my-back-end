@@ -44,11 +44,18 @@ public static class DependencyInjection
 
         services.AddHttpContextAccessor();
 
+        services.AddHttpClient(nameof(GoogleTokenValidator));
+
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<IIdentityService, IdentityService>();
         services.AddSingleton<IDateTime, DateTimeService>();
         services.AddScoped<ITokenService, TokenService>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddScoped<ILoginAccountStore, LoginAccountStore>();
+        services.AddScoped<ILoginSecretHasher, LoginSecretHasher>();
+        services.AddScoped<IAuthSessionService, AuthSessionService>();
+        services.AddScoped<IGoogleTokenValidator, GoogleTokenValidator>();
+        services.AddScoped<ISqlSchemaBootstrapper, SqlSchemaBootstrapper>();
 
         services.AddScoped<IEmailService, EmailService>();
 

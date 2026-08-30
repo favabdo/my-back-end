@@ -23,6 +23,7 @@ public interface IApplicationDbContext
     DbSet<AbandonedCartItem> AbandonedCartItems { get; }
 
     DbSet<ActivityLog> ActivityLogs { get; }
+    DbSet<LoginAccount> LoginAccounts { get; }
     DbSet<StoreSettings> StoreSettingsList { get; }
     DbSet<UserAddress> UserAddresses { get; }
     DbSet<StockOverride> StockOverrides { get; }

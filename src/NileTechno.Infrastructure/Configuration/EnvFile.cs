@@ -20,6 +20,7 @@ public static class EnvFile
         Alias("SMTP_FROM_NAME", "Smtp__FromName");
         Alias("CORS_ALLOWED_ORIGINS", "Cors__AllowedOrigins");
         Alias("JWT_KEY", "Jwt__Key");
+        Alias("GOOGLE_CLIENT_ID", "Google__ClientId");
     }
 
     public static string? Find()

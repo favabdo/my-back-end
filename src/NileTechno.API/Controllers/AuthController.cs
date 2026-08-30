@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using NileTechno.Application.Features.Auth.Commands.ConfirmEmail;
 using NileTechno.Application.Features.Auth.Commands.ForgotPassword;
+using NileTechno.Application.Features.Auth.Commands.GoogleLogin;
 using NileTechno.Application.Features.Auth.Commands.Login;
 using NileTechno.Application.Features.Auth.Commands.Logout;
 using NileTechno.Application.Features.Auth.Commands.RefreshToken;
@@ -20,6 +21,14 @@ public class AuthController : ApiControllerBase
         var result = await Mediator.Send(command);
         if (!result.Succeeded) return BadRequest(new { errors = result.Errors });
         return Ok(new { message = "تم إنشاء الحساب بنجاح، برجاء تفعيل بريدك الإلكتروني.", userId = result.Data });
+    }
+
+    [HttpPost("google")]
+    public async Task<IActionResult> Google(GoogleLoginCommand command)
+    {
+        var result = await Mediator.Send(command);
+        if (!result.Succeeded) return Unauthorized(new { errors = result.Errors });
+        return Ok(result.Data);
     }
 
     [HttpPost("login")]

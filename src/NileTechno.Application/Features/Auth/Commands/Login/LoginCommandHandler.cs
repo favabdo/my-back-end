@@ -1,59 +1,96 @@
 using MediatR;
-using Microsoft.Extensions.Configuration;
+using NileTechno.Application.Common;
 using NileTechno.Application.Common.Interfaces;
 using NileTechno.Application.Common.Models;
 using NileTechno.Application.Features.Auth.DTOs;
+using NileTechno.Domain.Entities;
+using NileTechno.Domain.Enums;
 
 namespace NileTechno.Application.Features.Auth.Commands.Login;
 
 public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<AuthResponseDto>>
 {
     private readonly IIdentityService _identityService;
-    private readonly ITokenService _tokenService;
-    private readonly IConfiguration _configuration;
+    private readonly ILoginAccountStore _loginAccounts;
+    private readonly ILoginSecretHasher _secretHasher;
+    private readonly IAuthSessionService _sessions;
 
-    public LoginCommandHandler(IIdentityService identityService, ITokenService tokenService, IConfiguration configuration)
+    public LoginCommandHandler(
+        IIdentityService identityService,
+        ILoginAccountStore loginAccounts,
+        ILoginSecretHasher secretHasher,
+        IAuthSessionService sessions)
     {
         _identityService = identityService;
-        _tokenService = tokenService;
-        _configuration = configuration;
+        _loginAccounts = loginAccounts;
+        _secretHasher = secretHasher;
+        _sessions = sessions;
     }
 
     public async Task<Result<AuthResponseDto>> Handle(LoginCommand request, CancellationToken cancellationToken)
     {
-        var user = await _identityService.FindUserAsync(request.Email);
-
+        var email = EmailNormalizer.Normalize(request.Email);
         const string genericError = "البريد الإلكتروني أو كلمة المرور غير صحيحة.";
 
-        if (user is null)
-            return Result<AuthResponseDto>.Failure(genericError);
+        var account = await _loginAccounts.FindByEmailAsync(email, cancellationToken);
+        if (account is null)
+        {
+            account = await TryBackfillFromIdentityAsync(email, request.Password, cancellationToken);
+            if (account is null)
+                return Result<AuthResponseDto>.Failure(genericError);
+        }
 
-        if (user.IsBlocked)
+        if (account.AuthProvider == LoginAuthProvider.Google)
+            return Result<AuthResponseDto>.Failure("الحساب ده مسجّل بجوجل. استخدم متابعة باستخدام Google.");
+
+        if (account.IsBlocked)
             return Result<AuthResponseDto>.Failure("تم حظر هذا الحساب، تواصل مع الدعم الفني.");
 
-        if (!user.EmailConfirmed)
+        if (!account.EmailConfirmed)
             return Result<AuthResponseDto>.Failure("من فضلك فعّل بريدك الإلكتروني أولاً عن طريق الرابط المرسل إليك.");
 
-        var passwordValid = await _identityService.CheckPasswordAsync(request.Email, request.Password);
-        if (!passwordValid)
+        if (!_secretHasher.Verify(account, request.Password))
             return Result<AuthResponseDto>.Failure(genericError);
 
-        var roles = await _identityService.GetRolesAsync(user.UserId);
-        var tokens = _tokenService.GenerateTokens(user.UserId, user.Email, user.FullName, roles);
+        var identity = await _identityService.FindUserAsync(email);
+        if (identity is not null && identity.IsBlocked)
+            return Result<AuthResponseDto>.Failure("تم حظر هذا الحساب، تواصل مع الدعم الفني.");
 
-        var refreshExpiryDays = _configuration.GetSection("Jwt").GetValue<int>("RefreshTokenExpiryDays", 30);
-        await _identityService.SaveRefreshTokenAsync(user.UserId, tokens.RefreshToken, DateTime.UtcNow.AddDays(refreshExpiryDays));
-        await _identityService.UpdateLastLoginAsync(user.UserId);
-
-        return Result<AuthResponseDto>.Success(new AuthResponseDto
+        if (identity is null)
         {
-            UserId = user.UserId,
-            Email = user.Email,
-            FullName = user.FullName,
-            Roles = roles,
-            AccessToken = tokens.AccessToken,
-            AccessTokenExpiresAtUtc = tokens.AccessTokenExpiresAtUtc,
-            RefreshToken = tokens.RefreshToken
-        });
+            var created = await _identityService.CreateUserAsync(email, request.Password, account.FullName, account.Id);
+            if (!created.Succeeded)
+                return Result<AuthResponseDto>.Failure(created.Errors);
+        }
+
+        var roles = await _identityService.GetRolesAsync(account.Id);
+        var response = await _sessions.IssueAsync(account, roles, cancellationToken);
+        return Result<AuthResponseDto>.Success(response);
+    }
+
+    private async Task<LoginAccount?> TryBackfillFromIdentityAsync(string email, string password, CancellationToken cancellationToken)
+    {
+        var identity = await _identityService.FindUserAsync(email);
+        if (identity is null)
+            return null;
+
+        if (!await _identityService.CheckPasswordAsync(email, password))
+            return null;
+
+        var account = new LoginAccount
+        {
+            Id = identity.UserId,
+            Email = email,
+            NormalizedEmail = email,
+            FullName = identity.FullName,
+            AuthProvider = LoginAuthProvider.Password,
+            EmailConfirmed = identity.EmailConfirmed,
+            IsBlocked = identity.IsBlocked,
+            LoyaltyPoints = 100,
+            CreatedAt = DateTime.UtcNow
+        };
+        account.PasswordHash = _secretHasher.Hash(account, password);
+        await _loginAccounts.AddAsync(account, cancellationToken);
+        return account;
     }
 }

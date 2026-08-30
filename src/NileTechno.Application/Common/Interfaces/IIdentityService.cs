@@ -6,7 +6,7 @@ public record UserLookupDto(Guid UserId, string Email, string FullName, bool Ema
 
 public interface IIdentityService
 {
-    Task<CreateUserResult> CreateUserAsync(string email, string password, string fullName);
+    Task<CreateUserResult> CreateUserAsync(string email, string password, string fullName, Guid? userId = null, bool emailConfirmed = false);
 
     Task<UserLookupDto?> FindUserAsync(string email);
     Task<bool> EmailExistsAsync(string email);

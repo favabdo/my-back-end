@@ -8,25 +8,35 @@ namespace NileTechno.Infrastructure.Services;
 public class IdentityService : IIdentityService
 {
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly RoleManager<IdentityRole<Guid>> _roleManager;
 
-    public IdentityService(UserManager<ApplicationUser> userManager)
+    public IdentityService(UserManager<ApplicationUser> userManager, RoleManager<IdentityRole<Guid>> roleManager)
     {
         _userManager = userManager;
+        _roleManager = roleManager;
     }
 
-    public async Task<CreateUserResult> CreateUserAsync(string email, string password, string fullName)
+    public async Task<CreateUserResult> CreateUserAsync(string email, string password, string fullName, Guid? userId = null, bool emailConfirmed = false)
     {
         var user = new ApplicationUser
         {
+            Id = userId ?? Guid.NewGuid(),
             UserName = email,
             Email = email,
-            FullName = fullName
+            FullName = fullName,
+            EmailConfirmed = emailConfirmed
         };
 
         var result = await _userManager.CreateAsync(user, password);
 
         if (!result.Succeeded)
             return new CreateUserResult(false, null, result.Errors.Select(e => e.Description).ToArray());
+
+        foreach (var roleName in new[] { "User", "Admin", "MainAdmin" })
+        {
+            if (!await _roleManager.RoleExistsAsync(roleName))
+                await _roleManager.CreateAsync(new IdentityRole<Guid>(roleName));
+        }
 
         await _userManager.AddToRoleAsync(user, "User");
 
