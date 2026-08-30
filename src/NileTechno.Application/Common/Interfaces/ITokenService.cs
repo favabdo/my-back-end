@@ -4,5 +4,5 @@ public record AuthTokenResult(string AccessToken, DateTime AccessTokenExpiresAtU
 
 public interface ITokenService
 {
-    AuthTokenResult GenerateTokens(Guid userId, string email, string fullName, IList<string> roles);
+    AuthTokenResult GenerateTokens(int userId, string email, string fullName, IList<string> roles);
 }

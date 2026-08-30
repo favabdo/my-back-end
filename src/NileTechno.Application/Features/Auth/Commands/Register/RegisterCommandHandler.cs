@@ -8,7 +8,7 @@ using NileTechno.Domain.Enums;
 
 namespace NileTechno.Application.Features.Auth.Commands.Register;
 
-public class RegisterCommandHandler : IRequestHandler<RegisterCommand, Result<Guid>>
+public class RegisterCommandHandler : IRequestHandler<RegisterCommand, Result<int>>
 {
     private readonly IIdentityService _identityService;
     private readonly ILoginAccountStore _loginAccounts;
@@ -30,7 +30,7 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, Result<Gu
         _configuration = configuration;
     }
 
-    public async Task<Result<Guid>> Handle(RegisterCommand request, CancellationToken cancellationToken)
+    public async Task<Result<int>> Handle(RegisterCommand request, CancellationToken cancellationToken)
     {
         try
         {
@@ -38,12 +38,10 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, Result<Gu
             var fullName = request.FullName.Trim();
             var existingAccount = await _loginAccounts.FindByEmailAsync(email, cancellationToken);
             if (existingAccount is not null)
-                return Result<Guid>.Failure("البريد الإلكتروني مستخدم بالفعل، جرّب تسجيل الدخول.");
+                return Result<int>.Failure("البريد الإلكتروني مستخدم بالفعل، جرّب تسجيل الدخول.");
 
-            var userId = Guid.NewGuid();
             var account = new LoginAccount
             {
-                Id = userId,
                 Email = email,
                 NormalizedEmail = email,
                 FullName = fullName,
@@ -56,11 +54,11 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, Result<Gu
             await _loginAccounts.AddAsync(account, cancellationToken);
 
             TrySendActivationEmails(email, fullName);
-            return Result<Guid>.Success(userId);
+            return Result<int>.Success(account.Id);
         }
         catch (Exception ex)
         {
-            return Result<Guid>.Failure($"تعذر إنشاء الحساب: {ex.Message}");
+            return Result<int>.Failure($"تعذر إنشاء الحساب: {ex.Message}");
         }
     }
 

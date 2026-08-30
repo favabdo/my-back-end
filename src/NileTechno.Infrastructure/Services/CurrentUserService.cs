@@ -26,6 +26,15 @@ public class CurrentUserService : ICurrentUserService
         }
     }
 
+    public int? AccountId
+    {
+        get
+        {
+            var value = User?.FindFirstValue(ClaimTypes.NameIdentifier);
+            return int.TryParse(value, out var id) ? id : null;
+        }
+    }
+
     public string? Email => User?.FindFirstValue(ClaimTypes.Email);
 
     public bool IsAdmin => User?.IsInRole("Admin") == true || User?.IsInRole("MainAdmin") == true;

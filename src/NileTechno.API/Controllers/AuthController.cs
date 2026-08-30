@@ -51,7 +51,7 @@ public class AuthController : ApiControllerBase
     [HttpPost("logout")]
     public async Task<IActionResult> Logout()
     {
-        var userId = Guid.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)!.Value);
+        var userId = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)!.Value);
         await Mediator.Send(new LogoutCommand(userId));
         return Ok(new { message = "تم تسجيل الخروج بنجاح." });
     }

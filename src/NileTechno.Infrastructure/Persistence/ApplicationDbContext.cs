@@ -142,6 +142,8 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
         builder.Entity<LoginAccount>(e =>
         {
             e.ToTable("Eco_LoginAccounts_byA");
+            e.HasKey(a => a.Id);
+            e.Property(a => a.Id).UseIdentityColumn(1, 1);
             e.HasIndex(a => a.NormalizedEmail).IsUnique();
             e.Property(a => a.Email).HasMaxLength(256);
             e.Property(a => a.NormalizedEmail).HasMaxLength(256);

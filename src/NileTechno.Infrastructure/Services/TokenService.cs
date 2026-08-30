@@ -17,7 +17,7 @@ public class TokenService : ITokenService
         _configuration = configuration;
     }
 
-    public AuthTokenResult GenerateTokens(Guid userId, string email, string fullName, IList<string> roles)
+    public AuthTokenResult GenerateTokens(int userId, string email, string fullName, IList<string> roles)
     {
         var jwtSection = _configuration.GetSection("Jwt");
         var key = jwtSection["Key"]!;

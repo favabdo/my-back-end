@@ -65,7 +65,6 @@ public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, Res
     {
         var account = new LoginAccount
         {
-            Id = Guid.NewGuid(),
             Email = google.Email,
             NormalizedEmail = google.Email,
             FullName = google.Name,

@@ -14,7 +14,7 @@ public class LoginAccountStore : ILoginAccountStore
         _db = db;
     }
 
-    public Task<LoginAccount?> FindByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
+    public Task<LoginAccount?> FindByIdAsync(int id, CancellationToken cancellationToken = default) =>
         _db.LoginAccounts.FirstOrDefaultAsync(a => a.Id == id, cancellationToken);
 
     public Task<LoginAccount?> FindByEmailAsync(string email, CancellationToken cancellationToken = default)

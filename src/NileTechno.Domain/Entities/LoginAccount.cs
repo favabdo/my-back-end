@@ -1,10 +1,10 @@
-using NileTechno.Domain.Common;
 using NileTechno.Domain.Enums;
 
 namespace NileTechno.Domain.Entities;
 
-public class LoginAccount : BaseEntity
+public class LoginAccount
 {
+    public int Id { get; set; }
     public string Email { get; set; } = string.Empty;
     public string NormalizedEmail { get; set; } = string.Empty;
     public string PasswordHash { get; set; } = string.Empty;
@@ -20,4 +20,6 @@ public class LoginAccount : BaseEntity
     public string? RefreshToken { get; set; }
     public DateTime? RefreshTokenExpiresAtUtc { get; set; }
     public DateTime? LastLoginAt { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
 }

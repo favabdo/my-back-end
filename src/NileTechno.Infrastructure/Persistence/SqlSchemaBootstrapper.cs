@@ -182,12 +182,20 @@ public class SqlSchemaBootstrapper : ISqlSchemaBootstrapper
         const string table = "Eco_LoginAccounts_byA";
         await RenameTableIfNeededAsync(connection, "LoginAccounts_byA", table, cancellationToken);
 
+        if (await TableExistsAsync(connection, table, cancellationToken)
+            && !await HasIntIdentityIdAsync(connection, table, cancellationToken)
+            && await TableRowCountAsync(connection, table, cancellationToken) == 0)
+        {
+            _logger.LogInformation("Recreating empty dbo.{Table} with IDENTITY(1,1) Id", table);
+            await ExecuteAsync(connection, "DROP TABLE dbo.Eco_LoginAccounts_byA;", cancellationToken);
+        }
+
         if (!await TableExistsAsync(connection, table, cancellationToken))
         {
             _logger.LogInformation("Creating table dbo.{Table}", table);
             await ExecuteAsync(connection, """
                 CREATE TABLE dbo.Eco_LoginAccounts_byA (
-                    Id uniqueidentifier NOT NULL CONSTRAINT PK_Eco_LoginAccounts_byA PRIMARY KEY,
+                    Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_Eco_LoginAccounts_byA PRIMARY KEY,
                     Email nvarchar(256) NOT NULL,
                     NormalizedEmail nvarchar(256) NOT NULL,
                     PasswordHash nvarchar(max) NOT NULL,
@@ -203,7 +211,7 @@ public class SqlSchemaBootstrapper : ISqlSchemaBootstrapper
                     RefreshToken nvarchar(max) NULL,
                     RefreshTokenExpiresAtUtc datetime2 NULL,
                     LastLoginAt datetime2 NULL,
-                    CreatedAt datetime2 NOT NULL,
+                    CreatedAt datetime2 NOT NULL CONSTRAINT DF_Eco_LoginAccounts_byA_CreatedAt DEFAULT (SYSUTCDATETIME()),
                     UpdatedAt datetime2 NULL
                 );
                 CREATE UNIQUE INDEX IX_Eco_LoginAccounts_byA_NormalizedEmail
@@ -260,6 +268,39 @@ public class SqlSchemaBootstrapper : ISqlSchemaBootstrapper
 
         _logger.LogInformation("Renaming dbo.{Old} to dbo.{New}", oldName, newName);
         await ExecuteAsync(connection, $"EXEC sp_rename N'dbo.{oldName}', N'{newName}';", cancellationToken);
+    }
+
+    private static async Task<bool> HasIntIdentityIdAsync(
+        SqlConnection connection,
+        string table,
+        CancellationToken cancellationToken)
+    {
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            SELECT 1
+            FROM sys.columns c
+            INNER JOIN sys.tables t ON c.object_id = t.object_id
+            INNER JOIN sys.types ty ON c.user_type_id = ty.user_type_id
+            WHERE t.name = @table
+              AND SCHEMA_NAME(t.schema_id) = N'dbo'
+              AND c.name = N'Id'
+              AND ty.name = N'int'
+              AND c.is_identity = 1;
+            """;
+        cmd.Parameters.AddWithValue("@table", table);
+        var result = await cmd.ExecuteScalarAsync(cancellationToken);
+        return result is not null;
+    }
+
+    private static async Task<int> TableRowCountAsync(
+        SqlConnection connection,
+        string table,
+        CancellationToken cancellationToken)
+    {
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = $"SELECT COUNT_BIG(*) FROM dbo.{table};";
+        var result = await cmd.ExecuteScalarAsync(cancellationToken);
+        return Convert.ToInt32(result);
     }
 
     private static async Task<bool> TableExistsAsync(SqlConnection connection, string table, CancellationToken cancellationToken)
