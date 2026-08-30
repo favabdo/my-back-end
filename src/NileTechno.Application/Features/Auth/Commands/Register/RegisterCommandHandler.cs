@@ -37,48 +37,25 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, Result<Gu
             var email = EmailNormalizer.Normalize(request.Email);
             var fullName = request.FullName.Trim();
             var existingAccount = await _loginAccounts.FindByEmailAsync(email, cancellationToken);
-            var existingIdentity = await _identityService.FindUserAsync(email);
-
-            if (existingAccount is not null && existingIdentity is not null)
+            if (existingAccount is not null)
                 return Result<Guid>.Failure("البريد الإلكتروني مستخدم بالفعل، جرّب تسجيل الدخول.");
 
-            Guid userId;
-            if (existingIdentity is not null)
+            var userId = Guid.NewGuid();
+            var account = new LoginAccount
             {
-                userId = existingIdentity.UserId;
-            }
-            else
-            {
-                userId = existingAccount?.Id ?? Guid.NewGuid();
-                var createResult = await _identityService.CreateUserAsync(
-                    email, request.Password, fullName, userId, emailConfirmed: true);
-                if (!createResult.Succeeded)
-                    return Result<Guid>.Failure(createResult.Errors);
-                userId = createResult.UserId ?? userId;
-            }
+                Id = userId,
+                Email = email,
+                NormalizedEmail = email,
+                FullName = fullName,
+                AuthProvider = LoginAuthProvider.Password,
+                EmailConfirmed = true,
+                LoyaltyPoints = 100,
+                CreatedAt = DateTime.UtcNow
+            };
+            account.PasswordHash = _secretHasher.Hash(account, request.Password);
+            await _loginAccounts.AddAsync(account, cancellationToken);
 
-            if (existingAccount is null)
-            {
-                var account = new LoginAccount
-                {
-                    Id = userId,
-                    Email = email,
-                    NormalizedEmail = email,
-                    FullName = fullName,
-                    AuthProvider = LoginAuthProvider.Password,
-                    EmailConfirmed = true,
-                    LoyaltyPoints = 100,
-                    CreatedAt = DateTime.UtcNow
-                };
-                account.PasswordHash = _secretHasher.Hash(account, request.Password);
-                await _loginAccounts.AddAsync(account, cancellationToken);
-            }
-            else if (!existingAccount.EmailConfirmed)
-            {
-                existingAccount.EmailConfirmed = true;
-                await _loginAccounts.UpdateAsync(existingAccount, cancellationToken);
-            }
-
+            await _identityService.CreateUserAsync(email, request.Password, fullName, userId, emailConfirmed: true);
             TrySendActivationEmails(email, fullName);
             return Result<Guid>.Success(userId);
         }

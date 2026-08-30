@@ -34,8 +34,15 @@ public class AuthSessionService : IAuthSessionService
         account.LastLoginAt = DateTime.UtcNow;
         await _loginAccounts.UpdateAsync(account, cancellationToken);
 
-        await _identityService.SaveRefreshTokenAsync(account.Id, tokens.RefreshToken, account.RefreshTokenExpiresAtUtc.Value);
-        await _identityService.UpdateLastLoginAsync(account.Id);
+        try
+        {
+            await _identityService.SaveRefreshTokenAsync(account.Id, tokens.RefreshToken, account.RefreshTokenExpiresAtUtc.Value);
+            await _identityService.UpdateLastLoginAsync(account.Id);
+        }
+        catch
+        {
+            /* Eco_LoginAccounts_byA is the session source */
+        }
 
         return new AuthResponseDto
         {

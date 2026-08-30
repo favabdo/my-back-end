@@ -23,6 +23,9 @@ public class LoginAccountStore : ILoginAccountStore
         return _db.LoginAccounts.FirstOrDefaultAsync(a => a.NormalizedEmail == normalized, cancellationToken);
     }
 
+    public Task<LoginAccount?> FindByRefreshTokenAsync(string refreshToken, CancellationToken cancellationToken = default) =>
+        _db.LoginAccounts.FirstOrDefaultAsync(a => a.RefreshToken == refreshToken, cancellationToken);
+
     public Task<LoginAccount?> FindByGoogleSubjectAsync(string googleSubject, CancellationToken cancellationToken = default) =>
         _db.LoginAccounts.FirstOrDefaultAsync(a => a.GoogleSubject == googleSubject, cancellationToken);
 

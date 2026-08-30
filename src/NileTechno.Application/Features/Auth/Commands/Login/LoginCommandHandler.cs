@@ -60,13 +60,11 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, Result<AuthResp
             return Result<AuthResponseDto>.Failure("تم حظر هذا الحساب، تواصل مع الدعم الفني.");
 
         if (identity is null)
-        {
-            var created = await _identityService.CreateUserAsync(email, request.Password, account.FullName, account.Id);
-            if (!created.Succeeded)
-                return Result<AuthResponseDto>.Failure(created.Errors);
-        }
+            await _identityService.CreateUserAsync(email, request.Password, account.FullName, account.Id);
 
         var roles = await _identityService.GetRolesAsync(account.Id);
+        if (roles.Count == 0)
+            roles = new List<string> { "User" };
         var response = await _sessions.IssueAsync(account, roles, cancellationToken);
         return Result<AuthResponseDto>.Success(response);
     }

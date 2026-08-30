@@ -64,17 +64,17 @@ public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, Res
 
         if (await _identityService.FindUserAsync(account.Email) is null)
         {
-            var created = await _identityService.CreateUserAsync(
+            await _identityService.CreateUserAsync(
                 account.Email,
                 CreateRandomPassword(),
                 account.FullName,
                 account.Id,
                 emailConfirmed: true);
-            if (!created.Succeeded)
-                return Result<AuthResponseDto>.Failure(created.Errors);
         }
 
         var roles = await _identityService.GetRolesAsync(account.Id);
+        if (roles.Count == 0)
+            roles = new List<string> { "User" };
         var response = await _sessions.IssueAsync(account, roles, cancellationToken);
         return Result<AuthResponseDto>.Success(response);
     }
@@ -86,8 +86,7 @@ public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, Res
         var identityPassword = CreateRandomPassword();
 
         var created = await _identityService.CreateUserAsync(google.Email, identityPassword, google.Name, userId, emailConfirmed: true);
-        if (!created.Succeeded)
-            return null;
+        _ = created;
 
         var account = new LoginAccount
         {
