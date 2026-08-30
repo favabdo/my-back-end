@@ -1,0 +1,17 @@
+---
+description: New ecommerce SQL tables must be named Eco_<Name>_byA
+alwaysApply: true
+---
+
+# Ecommerce SQL table naming
+
+New tables for this NileTechno shop/project must use:
+
+`Eco_<PascalOrClearName>_byA`
+
+Examples: `Eco_LoginAccounts_byA`, `Eco_UserAddresses_byA`
+
+- Prefix `Eco_` and suffix `_byA` are required on every new table.
+- Do not add a new table under any other name.
+- Do not rename existing Identity/stock tables unless Abdullah asks.
+- Startup schema code: create the table if missing; if present, add missing columns only.

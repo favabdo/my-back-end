@@ -21,19 +21,173 @@ public class SqlSchemaBootstrapper : ISqlSchemaBootstrapper
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(cancellationToken);
 
+        await EnsureIdentityAsync(connection, cancellationToken);
         await EnsureLoginAccountsByAAsync(connection, cancellationToken);
+    }
+
+    private async Task EnsureIdentityAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        if (!await TableExistsAsync(connection, "AspNetUsers", cancellationToken))
+        {
+            _logger.LogInformation("Creating table dbo.AspNetUsers");
+            await ExecuteAsync(connection, """
+                CREATE TABLE dbo.AspNetUsers (
+                    Id uniqueidentifier NOT NULL CONSTRAINT PK_AspNetUsers PRIMARY KEY,
+                    UserName nvarchar(256) NULL,
+                    NormalizedUserName nvarchar(256) NULL,
+                    Email nvarchar(256) NULL,
+                    NormalizedEmail nvarchar(256) NULL,
+                    EmailConfirmed bit NOT NULL CONSTRAINT DF_AspNetUsers_EmailConfirmed DEFAULT (0),
+                    PasswordHash nvarchar(max) NULL,
+                    SecurityStamp nvarchar(max) NULL,
+                    ConcurrencyStamp nvarchar(max) NULL,
+                    PhoneNumber nvarchar(max) NULL,
+                    PhoneNumberConfirmed bit NOT NULL CONSTRAINT DF_AspNetUsers_PhoneNumberConfirmed DEFAULT (0),
+                    TwoFactorEnabled bit NOT NULL CONSTRAINT DF_AspNetUsers_TwoFactorEnabled DEFAULT (0),
+                    LockoutEnd datetimeoffset NULL,
+                    LockoutEnabled bit NOT NULL CONSTRAINT DF_AspNetUsers_LockoutEnabled DEFAULT (1),
+                    AccessFailedCount int NOT NULL CONSTRAINT DF_AspNetUsers_AccessFailedCount DEFAULT (0),
+                    FullName nvarchar(200) NOT NULL CONSTRAINT DF_AspNetUsers_FullName DEFAULT (''),
+                    Role int NOT NULL CONSTRAINT DF_AspNetUsers_Role DEFAULT (0),
+                    IsBlocked bit NOT NULL CONSTRAINT DF_AspNetUsers_IsBlocked DEFAULT (0),
+                    BlockedAt datetime2 NULL,
+                    LoyaltyPoints int NOT NULL CONSTRAINT DF_AspNetUsers_LoyaltyPoints DEFAULT (100),
+                    LastLoginAt datetime2 NULL,
+                    RefreshToken nvarchar(max) NULL,
+                    RefreshTokenExpiresAtUtc datetime2 NULL
+                );
+                CREATE UNIQUE INDEX UserNameIndex ON dbo.AspNetUsers (NormalizedUserName) WHERE NormalizedUserName IS NOT NULL;
+                CREATE INDEX EmailIndex ON dbo.AspNetUsers (NormalizedEmail);
+                """, cancellationToken);
+        }
+        else
+        {
+            _logger.LogInformation("Table dbo.AspNetUsers already exists; checking missing columns only");
+            await EnsureColumnAsync(connection, "AspNetUsers", "UserName", "nvarchar(256) NULL", cancellationToken);
+            await EnsureColumnAsync(connection, "AspNetUsers", "NormalizedUserName", "nvarchar(256) NULL", cancellationToken);
+            await EnsureColumnAsync(connection, "AspNetUsers", "Email", "nvarchar(256) NULL", cancellationToken);
+            await EnsureColumnAsync(connection, "AspNetUsers", "NormalizedEmail", "nvarchar(256) NULL", cancellationToken);
+            await EnsureColumnAsync(connection, "AspNetUsers", "EmailConfirmed", "bit NOT NULL CONSTRAINT DF_AspNetUsers_EmailConfirmed DEFAULT (0)", cancellationToken);
+            await EnsureColumnAsync(connection, "AspNetUsers", "PasswordHash", "nvarchar(max) NULL", cancellationToken);
+            await EnsureColumnAsync(connection, "AspNetUsers", "SecurityStamp", "nvarchar(max) NULL", cancellationToken);
+            await EnsureColumnAsync(connection, "AspNetUsers", "ConcurrencyStamp", "nvarchar(max) NULL", cancellationToken);
+            await EnsureColumnAsync(connection, "AspNetUsers", "PhoneNumber", "nvarchar(max) NULL", cancellationToken);
+            await EnsureColumnAsync(connection, "AspNetUsers", "PhoneNumberConfirmed", "bit NOT NULL CONSTRAINT DF_AspNetUsers_PhoneNumberConfirmed DEFAULT (0)", cancellationToken);
+            await EnsureColumnAsync(connection, "AspNetUsers", "TwoFactorEnabled", "bit NOT NULL CONSTRAINT DF_AspNetUsers_TwoFactorEnabled DEFAULT (0)", cancellationToken);
+            await EnsureColumnAsync(connection, "AspNetUsers", "LockoutEnd", "datetimeoffset NULL", cancellationToken);
+            await EnsureColumnAsync(connection, "AspNetUsers", "LockoutEnabled", "bit NOT NULL CONSTRAINT DF_AspNetUsers_LockoutEnabled DEFAULT (1)", cancellationToken);
+            await EnsureColumnAsync(connection, "AspNetUsers", "AccessFailedCount", "int NOT NULL CONSTRAINT DF_AspNetUsers_AccessFailedCount DEFAULT (0)", cancellationToken);
+            await EnsureColumnAsync(connection, "AspNetUsers", "FullName", "nvarchar(200) NOT NULL CONSTRAINT DF_AspNetUsers_FullName DEFAULT ('')", cancellationToken);
+            await EnsureColumnAsync(connection, "AspNetUsers", "Role", "int NOT NULL CONSTRAINT DF_AspNetUsers_Role DEFAULT (0)", cancellationToken);
+            await EnsureColumnAsync(connection, "AspNetUsers", "IsBlocked", "bit NOT NULL CONSTRAINT DF_AspNetUsers_IsBlocked DEFAULT (0)", cancellationToken);
+            await EnsureColumnAsync(connection, "AspNetUsers", "BlockedAt", "datetime2 NULL", cancellationToken);
+            await EnsureColumnAsync(connection, "AspNetUsers", "LoyaltyPoints", "int NOT NULL CONSTRAINT DF_AspNetUsers_LoyaltyPoints DEFAULT (100)", cancellationToken);
+            await EnsureColumnAsync(connection, "AspNetUsers", "LastLoginAt", "datetime2 NULL", cancellationToken);
+            await EnsureColumnAsync(connection, "AspNetUsers", "RefreshToken", "nvarchar(max) NULL", cancellationToken);
+            await EnsureColumnAsync(connection, "AspNetUsers", "RefreshTokenExpiresAtUtc", "datetime2 NULL", cancellationToken);
+
+            await ExecuteAsync(connection, """
+                UPDATE dbo.AspNetUsers
+                SET NormalizedEmail = UPPER(Email)
+                WHERE NormalizedEmail IS NULL AND Email IS NOT NULL;
+                UPDATE dbo.AspNetUsers
+                SET NormalizedUserName = UPPER(UserName)
+                WHERE NormalizedUserName IS NULL AND UserName IS NOT NULL;
+                """, cancellationToken);
+        }
+
+        if (!await TableExistsAsync(connection, "AspNetRoles", cancellationToken))
+        {
+            await ExecuteAsync(connection, """
+                CREATE TABLE dbo.AspNetRoles (
+                    Id uniqueidentifier NOT NULL CONSTRAINT PK_AspNetRoles PRIMARY KEY,
+                    Name nvarchar(256) NULL,
+                    NormalizedName nvarchar(256) NULL,
+                    ConcurrencyStamp nvarchar(max) NULL
+                );
+                CREATE UNIQUE INDEX RoleNameIndex ON dbo.AspNetRoles (NormalizedName) WHERE NormalizedName IS NOT NULL;
+                """, cancellationToken);
+        }
+        else
+        {
+            await EnsureColumnAsync(connection, "AspNetRoles", "Name", "nvarchar(256) NULL", cancellationToken);
+            await EnsureColumnAsync(connection, "AspNetRoles", "NormalizedName", "nvarchar(256) NULL", cancellationToken);
+            await EnsureColumnAsync(connection, "AspNetRoles", "ConcurrencyStamp", "nvarchar(max) NULL", cancellationToken);
+        }
+
+        if (!await TableExistsAsync(connection, "AspNetUserRoles", cancellationToken))
+        {
+            await ExecuteAsync(connection, """
+                CREATE TABLE dbo.AspNetUserRoles (
+                    UserId uniqueidentifier NOT NULL,
+                    RoleId uniqueidentifier NOT NULL,
+                    CONSTRAINT PK_AspNetUserRoles PRIMARY KEY (UserId, RoleId)
+                );
+                """, cancellationToken);
+        }
+
+        if (!await TableExistsAsync(connection, "AspNetUserClaims", cancellationToken))
+        {
+            await ExecuteAsync(connection, """
+                CREATE TABLE dbo.AspNetUserClaims (
+                    Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_AspNetUserClaims PRIMARY KEY,
+                    UserId uniqueidentifier NOT NULL,
+                    ClaimType nvarchar(max) NULL,
+                    ClaimValue nvarchar(max) NULL
+                );
+                """, cancellationToken);
+        }
+
+        if (!await TableExistsAsync(connection, "AspNetUserLogins", cancellationToken))
+        {
+            await ExecuteAsync(connection, """
+                CREATE TABLE dbo.AspNetUserLogins (
+                    LoginProvider nvarchar(450) NOT NULL,
+                    ProviderKey nvarchar(450) NOT NULL,
+                    ProviderDisplayName nvarchar(max) NULL,
+                    UserId uniqueidentifier NOT NULL,
+                    CONSTRAINT PK_AspNetUserLogins PRIMARY KEY (LoginProvider, ProviderKey)
+                );
+                """, cancellationToken);
+        }
+
+        if (!await TableExistsAsync(connection, "AspNetUserTokens", cancellationToken))
+        {
+            await ExecuteAsync(connection, """
+                CREATE TABLE dbo.AspNetUserTokens (
+                    UserId uniqueidentifier NOT NULL,
+                    LoginProvider nvarchar(450) NOT NULL,
+                    Name nvarchar(450) NOT NULL,
+                    Value nvarchar(max) NULL,
+                    CONSTRAINT PK_AspNetUserTokens PRIMARY KEY (UserId, LoginProvider, Name)
+                );
+                """, cancellationToken);
+        }
+
+        if (!await TableExistsAsync(connection, "AspNetRoleClaims", cancellationToken))
+        {
+            await ExecuteAsync(connection, """
+                CREATE TABLE dbo.AspNetRoleClaims (
+                    Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_AspNetRoleClaims PRIMARY KEY,
+                    RoleId uniqueidentifier NOT NULL,
+                    ClaimType nvarchar(max) NULL,
+                    ClaimValue nvarchar(max) NULL
+                );
+                """, cancellationToken);
+        }
     }
 
     private async Task EnsureLoginAccountsByAAsync(SqlConnection connection, CancellationToken cancellationToken)
     {
-        const string table = "LoginAccounts_byA";
+        const string table = "Eco_LoginAccounts_byA";
+        await RenameTableIfNeededAsync(connection, "LoginAccounts_byA", table, cancellationToken);
 
         if (!await TableExistsAsync(connection, table, cancellationToken))
         {
             _logger.LogInformation("Creating table dbo.{Table}", table);
             await ExecuteAsync(connection, """
-                CREATE TABLE dbo.LoginAccounts_byA (
-                    Id uniqueidentifier NOT NULL CONSTRAINT PK_LoginAccounts_byA PRIMARY KEY,
+                CREATE TABLE dbo.Eco_LoginAccounts_byA (
+                    Id uniqueidentifier NOT NULL CONSTRAINT PK_Eco_LoginAccounts_byA PRIMARY KEY,
                     Email nvarchar(256) NOT NULL,
                     NormalizedEmail nvarchar(256) NOT NULL,
                     PasswordHash nvarchar(max) NOT NULL,
@@ -41,10 +195,10 @@ public class SqlSchemaBootstrapper : ISqlSchemaBootstrapper
                     GoogleSubject nvarchar(128) NULL,
                     GoogleSignInToken nvarchar(max) NULL,
                     FullName nvarchar(200) NOT NULL,
-                    EmailConfirmed bit NOT NULL CONSTRAINT DF_LoginAccounts_byA_EmailConfirmed DEFAULT (0),
-                    IsBlocked bit NOT NULL CONSTRAINT DF_LoginAccounts_byA_IsBlocked DEFAULT (0),
+                    EmailConfirmed bit NOT NULL CONSTRAINT DF_Eco_LoginAccounts_byA_EmailConfirmed DEFAULT (0),
+                    IsBlocked bit NOT NULL CONSTRAINT DF_Eco_LoginAccounts_byA_IsBlocked DEFAULT (0),
                     BlockedAt datetime2 NULL,
-                    LoyaltyPoints int NOT NULL CONSTRAINT DF_LoginAccounts_byA_LoyaltyPoints DEFAULT (100),
+                    LoyaltyPoints int NOT NULL CONSTRAINT DF_Eco_LoginAccounts_byA_LoyaltyPoints DEFAULT (100),
                     Phone nvarchar(32) NULL,
                     RefreshToken nvarchar(max) NULL,
                     RefreshTokenExpiresAtUtc datetime2 NULL,
@@ -52,10 +206,10 @@ public class SqlSchemaBootstrapper : ISqlSchemaBootstrapper
                     CreatedAt datetime2 NOT NULL,
                     UpdatedAt datetime2 NULL
                 );
-                CREATE UNIQUE INDEX IX_LoginAccounts_byA_NormalizedEmail
-                    ON dbo.LoginAccounts_byA (NormalizedEmail);
-                CREATE UNIQUE INDEX IX_LoginAccounts_byA_GoogleSubject
-                    ON dbo.LoginAccounts_byA (GoogleSubject)
+                CREATE UNIQUE INDEX IX_Eco_LoginAccounts_byA_NormalizedEmail
+                    ON dbo.Eco_LoginAccounts_byA (NormalizedEmail);
+                CREATE UNIQUE INDEX IX_Eco_LoginAccounts_byA_GoogleSubject
+                    ON dbo.Eco_LoginAccounts_byA (GoogleSubject)
                     WHERE GoogleSubject IS NOT NULL;
                 """, cancellationToken);
             return;
@@ -66,31 +220,46 @@ public class SqlSchemaBootstrapper : ISqlSchemaBootstrapper
         await EnsureColumnAsync(connection, table, "Email", "nvarchar(256) NOT NULL", cancellationToken);
         await EnsureColumnAsync(connection, table, "NormalizedEmail", "nvarchar(256) NOT NULL", cancellationToken);
         await EnsureColumnAsync(connection, table, "PasswordHash", "nvarchar(max) NOT NULL", cancellationToken);
-        await EnsureColumnAsync(connection, table, "AuthProvider", "nvarchar(32) NOT NULL CONSTRAINT DF_LoginAccounts_byA_AuthProvider DEFAULT ('Password')", cancellationToken);
+        await EnsureColumnAsync(connection, table, "AuthProvider", "nvarchar(32) NOT NULL CONSTRAINT DF_Eco_LoginAccounts_byA_AuthProvider DEFAULT ('Password')", cancellationToken);
         await EnsureColumnAsync(connection, table, "GoogleSubject", "nvarchar(128) NULL", cancellationToken);
         await EnsureColumnAsync(connection, table, "GoogleSignInToken", "nvarchar(max) NULL", cancellationToken);
-        await EnsureColumnAsync(connection, table, "FullName", "nvarchar(200) NOT NULL CONSTRAINT DF_LoginAccounts_byA_FullName DEFAULT ('')", cancellationToken);
-        await EnsureColumnAsync(connection, table, "EmailConfirmed", "bit NOT NULL CONSTRAINT DF_LoginAccounts_byA_EmailConfirmed DEFAULT (0)", cancellationToken);
-        await EnsureColumnAsync(connection, table, "IsBlocked", "bit NOT NULL CONSTRAINT DF_LoginAccounts_byA_IsBlocked DEFAULT (0)", cancellationToken);
+        await EnsureColumnAsync(connection, table, "FullName", "nvarchar(200) NOT NULL CONSTRAINT DF_Eco_LoginAccounts_byA_FullName DEFAULT ('')", cancellationToken);
+        await EnsureColumnAsync(connection, table, "EmailConfirmed", "bit NOT NULL CONSTRAINT DF_Eco_LoginAccounts_byA_EmailConfirmed DEFAULT (0)", cancellationToken);
+        await EnsureColumnAsync(connection, table, "IsBlocked", "bit NOT NULL CONSTRAINT DF_Eco_LoginAccounts_byA_IsBlocked DEFAULT (0)", cancellationToken);
         await EnsureColumnAsync(connection, table, "BlockedAt", "datetime2 NULL", cancellationToken);
-        await EnsureColumnAsync(connection, table, "LoyaltyPoints", "int NOT NULL CONSTRAINT DF_LoginAccounts_byA_LoyaltyPoints DEFAULT (100)", cancellationToken);
+        await EnsureColumnAsync(connection, table, "LoyaltyPoints", "int NOT NULL CONSTRAINT DF_Eco_LoginAccounts_byA_LoyaltyPoints DEFAULT (100)", cancellationToken);
         await EnsureColumnAsync(connection, table, "Phone", "nvarchar(32) NULL", cancellationToken);
         await EnsureColumnAsync(connection, table, "RefreshToken", "nvarchar(max) NULL", cancellationToken);
         await EnsureColumnAsync(connection, table, "RefreshTokenExpiresAtUtc", "datetime2 NULL", cancellationToken);
         await EnsureColumnAsync(connection, table, "LastLoginAt", "datetime2 NULL", cancellationToken);
-        await EnsureColumnAsync(connection, table, "CreatedAt", "datetime2 NOT NULL CONSTRAINT DF_LoginAccounts_byA_CreatedAt DEFAULT (SYSUTCDATETIME())", cancellationToken);
+        await EnsureColumnAsync(connection, table, "CreatedAt", "datetime2 NOT NULL CONSTRAINT DF_Eco_LoginAccounts_byA_CreatedAt DEFAULT (SYSUTCDATETIME())", cancellationToken);
         await EnsureColumnAsync(connection, table, "UpdatedAt", "datetime2 NULL", cancellationToken);
 
-        await EnsureIndexAsync(connection, table, "IX_LoginAccounts_byA_NormalizedEmail", """
-            CREATE UNIQUE INDEX IX_LoginAccounts_byA_NormalizedEmail
-                ON dbo.LoginAccounts_byA (NormalizedEmail);
+        await EnsureIndexAsync(connection, table, "IX_Eco_LoginAccounts_byA_NormalizedEmail", """
+            CREATE UNIQUE INDEX IX_Eco_LoginAccounts_byA_NormalizedEmail
+                ON dbo.Eco_LoginAccounts_byA (NormalizedEmail);
             """, cancellationToken);
 
-        await EnsureIndexAsync(connection, table, "IX_LoginAccounts_byA_GoogleSubject", """
-            CREATE UNIQUE INDEX IX_LoginAccounts_byA_GoogleSubject
-                ON dbo.LoginAccounts_byA (GoogleSubject)
+        await EnsureIndexAsync(connection, table, "IX_Eco_LoginAccounts_byA_GoogleSubject", """
+            CREATE UNIQUE INDEX IX_Eco_LoginAccounts_byA_GoogleSubject
+                ON dbo.Eco_LoginAccounts_byA (GoogleSubject)
                 WHERE GoogleSubject IS NOT NULL;
             """, cancellationToken);
+    }
+
+    private async Task RenameTableIfNeededAsync(
+        SqlConnection connection,
+        string oldName,
+        string newName,
+        CancellationToken cancellationToken)
+    {
+        if (await TableExistsAsync(connection, newName, cancellationToken))
+            return;
+        if (!await TableExistsAsync(connection, oldName, cancellationToken))
+            return;
+
+        _logger.LogInformation("Renaming dbo.{Old} to dbo.{New}", oldName, newName);
+        await ExecuteAsync(connection, $"EXEC sp_rename N'dbo.{oldName}', N'{newName}';", cancellationToken);
     }
 
     private static async Task<bool> TableExistsAsync(SqlConnection connection, string table, CancellationToken cancellationToken)

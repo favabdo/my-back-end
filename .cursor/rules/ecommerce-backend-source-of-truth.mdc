@@ -14,3 +14,13 @@ When Abdullah asks to change the ecommerce backend, dashboard API, shop API, aut
 - Treat other ecommerce backend folders as local/experimental; they are not production.
 
 If a request is opened from another backend workspace, move work here (or tell him to open this repo) before editing.
+
+## SQL table names for new ecommerce tables
+
+Any **new** table added for this shop/project must be named:
+
+`Eco_<Name>_byA`
+
+Example: `Eco_LoginAccounts_byA`
+
+Do not create new tables without both the `Eco_` prefix and the `_byA` suffix. Existing shared/Identity tables (`AspNetUsers`, stock SPs, etc.) stay as they are unless Abdullah asks to rename them. On startup, create a missing `Eco_*_byA` table; if it already exists, add missing columns only.
