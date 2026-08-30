@@ -7,16 +7,11 @@ namespace NileTechno.Application.Features.Auth.Commands.RefreshToken;
 
 public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, Result<AuthResponseDto>>
 {
-    private readonly IIdentityService _identityService;
     private readonly IAuthSessionService _sessions;
     private readonly ILoginAccountStore _loginAccounts;
 
-    public RefreshTokenCommandHandler(
-        IIdentityService identityService,
-        IAuthSessionService sessions,
-        ILoginAccountStore loginAccounts)
+    public RefreshTokenCommandHandler(IAuthSessionService sessions, ILoginAccountStore loginAccounts)
     {
-        _identityService = identityService;
         _sessions = sessions;
         _loginAccounts = loginAccounts;
     }
@@ -30,11 +25,7 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, R
         if (account.IsBlocked)
             return Result<AuthResponseDto>.Failure("تم حظر هذا الحساب، تواصل مع الدعم الفني.");
 
-        var roles = await _identityService.GetRolesAsync(account.Id);
-        if (roles.Count == 0)
-            roles = new List<string> { "User" };
-
-        var response = await _sessions.IssueAsync(account, roles, cancellationToken);
+        var response = await _sessions.IssueAsync(account, new List<string> { "User" }, cancellationToken);
         return Result<AuthResponseDto>.Success(response);
     }
 }

@@ -55,7 +55,6 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, Result<Gu
             account.PasswordHash = _secretHasher.Hash(account, request.Password);
             await _loginAccounts.AddAsync(account, cancellationToken);
 
-            await _identityService.CreateUserAsync(email, request.Password, fullName, userId, emailConfirmed: true);
             TrySendActivationEmails(email, fullName);
             return Result<Guid>.Success(userId);
         }

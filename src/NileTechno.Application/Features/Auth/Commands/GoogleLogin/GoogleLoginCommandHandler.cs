@@ -13,20 +13,17 @@ public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, Res
     private readonly IGoogleTokenValidator _googleTokens;
     private readonly ILoginAccountStore _loginAccounts;
     private readonly ILoginSecretHasher _secretHasher;
-    private readonly IIdentityService _identityService;
     private readonly IAuthSessionService _sessions;
 
     public GoogleLoginCommandHandler(
         IGoogleTokenValidator googleTokens,
         ILoginAccountStore loginAccounts,
         ILoginSecretHasher secretHasher,
-        IIdentityService identityService,
         IAuthSessionService sessions)
     {
         _googleTokens = googleTokens;
         _loginAccounts = loginAccounts;
         _secretHasher = secretHasher;
-        _identityService = identityService;
         _sessions = sessions;
     }
 
@@ -44,9 +41,8 @@ public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, Res
 
         if (account is null)
         {
-            account = await CreateGoogleAccountAsync(google, cancellationToken);
-            if (account is null)
-                return Result<AuthResponseDto>.Failure("تعذر إنشاء الحساب من جوجل.");
+            account = CreateGoogleAccount(google);
+            await _loginAccounts.AddAsync(account, cancellationToken);
         }
         else
         {
@@ -59,38 +55,17 @@ public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, Res
             account.EmailConfirmed = true;
             if (account.AuthProvider == LoginAuthProvider.Password)
                 account.AuthProvider = LoginAuthProvider.Linked;
-            await _loginAccounts.UpdateAsync(account, cancellationToken);
         }
 
-        if (await _identityService.FindUserAsync(account.Email) is null)
-        {
-            await _identityService.CreateUserAsync(
-                account.Email,
-                CreateRandomPassword(),
-                account.FullName,
-                account.Id,
-                emailConfirmed: true);
-        }
-
-        var roles = await _identityService.GetRolesAsync(account.Id);
-        if (roles.Count == 0)
-            roles = new List<string> { "User" };
-        var response = await _sessions.IssueAsync(account, roles, cancellationToken);
+        var response = await _sessions.IssueAsync(account, new List<string> { "User" }, cancellationToken);
         return Result<AuthResponseDto>.Success(response);
     }
 
-    private async Task<LoginAccount?> CreateGoogleAccountAsync(GoogleIdentity google, CancellationToken cancellationToken)
+    private LoginAccount CreateGoogleAccount(GoogleIdentity google)
     {
-        var userId = Guid.NewGuid();
-        var passwordStandIn = CreateGooglePasswordToken(google.Subject);
-        var identityPassword = CreateRandomPassword();
-
-        var created = await _identityService.CreateUserAsync(google.Email, identityPassword, google.Name, userId, emailConfirmed: true);
-        _ = created;
-
         var account = new LoginAccount
         {
-            Id = userId,
+            Id = Guid.NewGuid(),
             Email = google.Email,
             NormalizedEmail = google.Email,
             FullName = google.Name,
@@ -100,15 +75,9 @@ public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, Res
             LoyaltyPoints = 100,
             CreatedAt = DateTime.UtcNow
         };
+        var passwordStandIn = $"google:{google.Subject}:{Convert.ToHexString(RandomNumberGenerator.GetBytes(32))}";
         account.PasswordHash = _secretHasher.Hash(account, passwordStandIn);
         account.GoogleSignInToken = account.PasswordHash;
-        await _loginAccounts.AddAsync(account, cancellationToken);
         return account;
     }
-
-    private static string CreateGooglePasswordToken(string subject) =>
-        $"google:{subject}:{Convert.ToHexString(RandomNumberGenerator.GetBytes(32))}";
-
-    private static string CreateRandomPassword() =>
-        $"Gg{Convert.ToBase64String(RandomNumberGenerator.GetBytes(24))}9!";
 }
