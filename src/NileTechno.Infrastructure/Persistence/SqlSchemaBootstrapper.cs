@@ -387,8 +387,104 @@ public class SqlSchemaBootstrapper : ISqlSchemaBootstrapper
         await RenameTableIfNeededAsync(connection, "Orders", "Ec_Orders", cancellationToken);
         await RenameTableIfNeededAsync(connection, "OrderItems", "Ec_OrderItems", cancellationToken);
         await RenameTableIfNeededAsync(connection, "OrderHistoryEntries", "Ec_OrderHistoryEntries", cancellationToken);
-        await RenameTableIfNeededAsync(connection, "Categories", "Ec_Categories", cancellationToken);
-        await RenameTableIfNeededAsync(connection, "Products", "Ec_Products", cancellationToken);
+        // ====== EC_Groups ======
+        await CreateTableIfMissingAsync(connection, "EC_Groups", cancellationToken, """
+            CREATE TABLE dbo.EC_Groups (
+                Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_EC_Groups PRIMARY KEY,
+                ServerId int NOT NULL,
+                Code nvarchar(50) NOT NULL,
+                Name nvarchar(200) NOT NULL,
+                GroupImg nvarchar(500) NULL,
+                Status int NOT NULL CONSTRAINT DF_EC_Groups_Status DEFAULT (0),
+                CreatedAt datetime2 NOT NULL CONSTRAINT DF_EC_Groups_CreatedAt DEFAULT (SYSUTCDATETIME()),
+                UpdatedAt datetime2 NULL
+            );
+            CREATE UNIQUE INDEX IX_EC_Groups_Code ON dbo.EC_Groups (Code);
+            CREATE INDEX IX_EC_Groups_ServerId ON dbo.EC_Groups (ServerId);
+            """);
+
+        // ====== EC_Products ======
+        await CreateTableIfMissingAsync(connection, "EC_Products", cancellationToken, """
+            CREATE TABLE dbo.EC_Products (
+                Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_EC_Products PRIMARY KEY,
+                ServerId int NOT NULL,
+                Code nvarchar(50) NOT NULL,
+                Name nvarchar(200) NOT NULL,
+                GroupID int NULL,
+                Description nvarchar(max) NULL,
+                Stock int NOT NULL CONSTRAINT DF_EC_Products_Stock DEFAULT (0),
+                Price decimal(18,2) NOT NULL CONSTRAINT DF_EC_Products_Price DEFAULT (0),
+                AvgRate float NOT NULL CONSTRAINT DF_EC_Products_AvgRate DEFAULT (0),
+                ProductImg nvarchar(500) NULL,
+                Status int NOT NULL CONSTRAINT DF_EC_Products_Status DEFAULT (0),
+                LastUpdate datetime2 NULL,
+                CreatedAt datetime2 NOT NULL CONSTRAINT DF_EC_Products_CreatedAt DEFAULT (SYSUTCDATETIME()),
+                UpdatedAt datetime2 NULL,
+                CONSTRAINT FK_EC_Products_Groups FOREIGN KEY (GroupID) REFERENCES dbo.EC_Groups(Id)
+            );
+            CREATE UNIQUE INDEX IX_EC_Products_Code ON dbo.EC_Products (Code);
+            CREATE INDEX IX_EC_Products_ServerId ON dbo.EC_Products (ServerId);
+            CREATE INDEX IX_EC_Products_GroupID ON dbo.EC_Products (GroupID);
+            """);
+
+        // ====== EC_Orders ======
+        await CreateTableIfMissingAsync(connection, "EC_Orders", cancellationToken, """
+            CREATE TABLE dbo.EC_Orders (
+                Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_EC_Orders PRIMARY KEY,
+                CustomerID int NOT NULL,
+                RegionID int NOT NULL,
+                PhoneNumber nvarchar(50) NOT NULL,
+                Price decimal(18,2) NOT NULL CONSTRAINT DF_EC_Orders_Price DEFAULT (0),
+                ShipPrice decimal(18,2) NOT NULL CONSTRAINT DF_EC_Orders_ShipPrice DEFAULT (0),
+                Total decimal(18,2) NOT NULL CONSTRAINT DF_EC_Orders_Total DEFAULT (0),
+                Notes nvarchar(max) NULL,
+                Status int NOT NULL CONSTRAINT DF_EC_Orders_Status DEFAULT (0),
+                CreatedAt datetime2 NOT NULL CONSTRAINT DF_EC_Orders_CreatedAt DEFAULT (SYSUTCDATETIME()),
+                UpdatedAt datetime2 NULL
+            );
+            CREATE INDEX IX_EC_Orders_CustomerID ON dbo.EC_Orders (CustomerID);
+            CREATE INDEX IX_EC_Orders_RegionID ON dbo.EC_Orders (RegionID);
+            CREATE INDEX IX_EC_Orders_Status ON dbo.EC_Orders (Status);
+            """);
+
+        // ====== Ec_Cart ======
+        await RenameTableIfNeededAsync(connection, "Cart", "Ec_Cart", cancellationToken);
+
+        await CreateTableIfMissingAsync(connection, "Ec_Cart", cancellationToken, """
+            CREATE TABLE dbo.Ec_Cart (
+                Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_Ec_Cart PRIMARY KEY,
+                ProductID int NOT NULL,
+                ProductServerId int NOT NULL,
+                OrderID int NULL,
+                Qty int NOT NULL CONSTRAINT DF_Ec_Cart_Qty DEFAULT (1),
+                Price decimal(18,2) NOT NULL CONSTRAINT DF_Ec_Cart_Price DEFAULT (0),
+                Total decimal(18,2) NOT NULL CONSTRAINT DF_Ec_Cart_Total DEFAULT (0),
+                Notes nvarchar(max) NULL,
+                CreatedAt datetime2 NOT NULL CONSTRAINT DF_Ec_Cart_CreatedAt DEFAULT (SYSUTCDATETIME()),
+                UpdatedAt datetime2 NULL,
+                CONSTRAINT FK_Ec_Cart_Products FOREIGN KEY (ProductID) REFERENCES dbo.EC_Products(Id) ON DELETE CASCADE,
+                CONSTRAINT FK_Ec_Cart_Orders FOREIGN KEY (OrderID) REFERENCES dbo.EC_Orders(Id) ON DELETE SET NULL
+            );
+            CREATE INDEX IX_Ec_Cart_ProductID_OrderID ON dbo.Ec_Cart (ProductID, OrderID);
+            CREATE INDEX IX_Ec_Cart_OrderID ON dbo.Ec_Cart (OrderID);
+            """);
+
+        // ====== EC_Rating ======
+        await CreateTableIfMissingAsync(connection, "EC_Rating", cancellationToken, """
+            CREATE TABLE dbo.EC_Rating (
+                Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_EC_Rating PRIMARY KEY,
+                ProductID int NOT NULL,
+                Rating int NOT NULL CONSTRAINT DF_EC_Rating_Rating DEFAULT (0),
+                Comment nvarchar(max) NULL,
+                Type nvarchar(50) NULL,
+                Status int NOT NULL CONSTRAINT DF_EC_Rating_Status DEFAULT (0),
+                CreatedAt datetime2 NOT NULL CONSTRAINT DF_EC_Rating_CreatedAt DEFAULT (SYSUTCDATETIME()),
+                UpdatedAt datetime2 NULL,
+                CONSTRAINT FK_EC_Rating_Products FOREIGN KEY (ProductID) REFERENCES dbo.EC_Products(Id) ON DELETE CASCADE
+            );
+            CREATE INDEX IX_EC_Rating_ProductID ON dbo.EC_Rating (ProductID);
+            """);
+
         await RenameTableIfNeededAsync(connection, "Coupons", "Ec_Coupons", cancellationToken);
         await RenameTableIfNeededAsync(connection, "ShippingZones", "Ec_ShippingZones", cancellationToken);
         await RenameTableIfNeededAsync(connection, "Reviews", "Ec_Reviews", cancellationToken);
