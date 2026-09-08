@@ -96,14 +96,21 @@ public class SqlSchemaBootstrapper : ISqlSchemaBootstrapper
             await EnsureColumnAsync(connection, "Ec_AspNetUsers", "RefreshToken", "nvarchar(max) NULL", cancellationToken);
             await EnsureColumnAsync(connection, "Ec_AspNetUsers", "RefreshTokenExpiresAtUtc", "datetime2 NULL", cancellationToken);
 
-            await ExecuteAsync(connection, """
-                UPDATE dbo.AspNetUsers
-                SET NormalizedEmail = UPPER(Email)
-                WHERE NormalizedEmail IS NULL AND Email IS NOT NULL;
-                UPDATE dbo.AspNetUsers
-                SET NormalizedUserName = UPPER(UserName)
-                WHERE NormalizedUserName IS NULL AND UserName IS NOT NULL;
-                """, cancellationToken);
+            if (await TableExistsAsync(connection, "AspNetUsers", cancellationToken))
+            {
+                await ExecuteAsync(connection, """
+                    UPDATE dbo.AspNetUsers
+                    SET NormalizedEmail = UPPER(Email)
+                    WHERE NormalizedEmail IS NULL AND Email IS NOT NULL;
+                    UPDATE dbo.AspNetUsers
+                    SET NormalizedUserName = UPPER(UserName)
+                    WHERE NormalizedUserName IS NULL AND UserName IS NOT NULL;
+                    """, cancellationToken);
+            }
+            else
+            {
+                _logger.LogInformation("dbo.AspNetUsers table does not exist; skipping data migration update");
+            }
         }
 
         if (!await TableExistsAsync(connection, "Ec_AspNetRoles", cancellationToken))
