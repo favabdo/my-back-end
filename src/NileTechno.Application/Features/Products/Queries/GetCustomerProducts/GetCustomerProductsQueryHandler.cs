@@ -22,5 +22,7 @@ public class GetCustomerProductsQueryHandler
             request.GroupId,
             request.Search,
             request.Page,
+            request.PageSize,
+            request.DeviceType,
             cancellationToken);
 }

@@ -17,6 +17,8 @@ public interface IItemStockQuery
         string? groupId,
         string? search,
         int pageNumber,
+        int pageSize,
+        string? deviceType,
         CancellationToken cancellationToken = default);
 
     Task<CustomerProductCardDto?> GetCustomerProductByCodeAsync(

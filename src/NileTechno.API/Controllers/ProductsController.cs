@@ -12,9 +12,16 @@ public class ProductsController : ApiControllerBase
     public async Task<IActionResult> Get(
         [FromQuery] string? groupId,
         [FromQuery] string? search,
-        [FromQuery] int page = 1)
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 0,
+        [FromQuery] string? deviceType = null,
+        [FromHeader(Name = "X-Device-Type")] string? headerDeviceType = null)
     {
-        var result = await Mediator.Send(new GetCustomerProductsQuery(groupId, search, page));
+        // Use header deviceType if query param not provided
+        if (string.IsNullOrEmpty(deviceType) && !string.IsNullOrEmpty(headerDeviceType))
+            deviceType = headerDeviceType;
+
+        var result = await Mediator.Send(new GetCustomerProductsQuery(groupId, search, page, pageSize, deviceType));
         return Ok(result);
     }
 

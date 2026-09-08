@@ -95,9 +95,27 @@ public class ItemStockQuery : IItemStockQuery
         string? groupId,
         string? search,
         int pageNumber,
+        int pageSize,
+        string? deviceType,
         CancellationToken cancellationToken = default)
     {
-        const int pageSize = 50;
+        // Determine actual page size based on device type
+        int actualPageSize = pageSize;
+        if (pageSize == 0) // If client didn't specify pageSize, use device-based default
+        {
+            if (deviceType?.ToLower() == "mobile")
+                actualPageSize = 20;
+            else if (deviceType?.ToLower() == "tablet")
+                actualPageSize = 30;
+            else // desktop or unspecified
+                actualPageSize = 50;
+        }
+        else
+        {
+            // Client specified pageSize, but enforce reasonable limits
+            actualPageSize = Math.Min(Math.Max(pageSize, 1), 100);
+        }
+
         var page = pageNumber < 1 ? 1 : pageNumber;
 
         if (IsStoredProcedure)
@@ -106,11 +124,11 @@ public class ItemStockQuery : IItemStockQuery
             var all = AggregateCustomer(rows, groupId, search, itemCode: null);
             var count = all.Count;
             var items = all
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
+                .Skip((page - 1) * actualPageSize)
+                .Take(actualPageSize)
                 .ToList();
             await AttachCustomerPricesAsync(items, cancellationToken);
-            return new PaginatedList<CustomerProductCardDto>(items, count, page, pageSize);
+            return new PaginatedList<CustomerProductCardDto>(items, count, page, actualPageSize);
         }
 
         var fromSql = $"""
@@ -155,12 +173,12 @@ public class ItemStockQuery : IItemStockQuery
 
         await using var dataCommand = CreateCommand(connection, dataSql);
         AddFilterParameters(dataCommand, groupId, storeCode: null, search, itemCode: null);
-        dataCommand.Parameters.Add(new SqlParameter("@skip", SqlDbType.Int) { Value = (page - 1) * pageSize });
-        dataCommand.Parameters.Add(new SqlParameter("@take", SqlDbType.Int) { Value = pageSize });
+        dataCommand.Parameters.Add(new SqlParameter("@skip", SqlDbType.Int) { Value = (page - 1) * actualPageSize });
+        dataCommand.Parameters.Add(new SqlParameter("@take", SqlDbType.Int) { Value = actualPageSize });
 
         var pageItems = (await ReadCustomerListAsync(dataCommand, cancellationToken)).ToList();
         await AttachCustomerPricesAsync(pageItems, cancellationToken);
-        return new PaginatedList<CustomerProductCardDto>(pageItems, totalCount, page, pageSize);
+        return new PaginatedList<CustomerProductCardDto>(pageItems, totalCount, page, actualPageSize);
     }
 
     public async Task<CustomerProductCardDto?> GetCustomerProductByCodeAsync(
