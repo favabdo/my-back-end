@@ -509,9 +509,9 @@ public class SqlSchemaBootstrapper : ISqlSchemaBootstrapper
         // ====== Orders subsystem ======
         await CreateTableIfMissingAsync(connection, "Ec_Orders", cancellationToken, """
             CREATE TABLE dbo.Ec_Orders (
-                Id uniqueidentifier NOT NULL CONSTRAINT PK_Orders PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+                Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_Orders PRIMARY KEY,
                 OrderNumber nvarchar(50) NOT NULL,
-                UserId uniqueidentifier NULL,
+                UserId int NULL,
                 Status int NOT NULL CONSTRAINT DF_Orders_Status DEFAULT (0),
                 CancelReason nvarchar(500) NULL,
                 InternalNote nvarchar(1000) NULL,
@@ -539,9 +539,9 @@ public class SqlSchemaBootstrapper : ISqlSchemaBootstrapper
 
         await CreateTableIfMissingAsync(connection, "Ec_OrderItems", cancellationToken, """
             CREATE TABLE dbo.Ec_OrderItems (
-                Id uniqueidentifier NOT NULL CONSTRAINT PK_OrderItems PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
-                OrderId uniqueidentifier NOT NULL,
-                ProductId uniqueidentifier NOT NULL,
+                Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_OrderItems PRIMARY KEY,
+                OrderId int NOT NULL,
+                ProductId int NOT NULL,
                 ProductName nvarchar(200) NOT NULL,
                 ProductImage nvarchar(500) NULL,
                 UnitPrice decimal(18,2) NOT NULL,
@@ -557,8 +557,8 @@ public class SqlSchemaBootstrapper : ISqlSchemaBootstrapper
 
         await CreateTableIfMissingAsync(connection, "Ec_OrderHistoryEntries", cancellationToken, """
             CREATE TABLE dbo.Ec_OrderHistoryEntries (
-                Id uniqueidentifier NOT NULL CONSTRAINT PK_OrderHistoryEntries PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
-                OrderId uniqueidentifier NOT NULL,
+                Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_OrderHistoryEntries PRIMARY KEY,
+                OrderId int NOT NULL,
                 Action nvarchar(500) NOT NULL,
                 Actor nvarchar(200) NOT NULL,
                 Type nvarchar(100) NOT NULL,
