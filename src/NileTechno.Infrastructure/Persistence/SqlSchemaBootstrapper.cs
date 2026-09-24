@@ -434,6 +434,9 @@ public class SqlSchemaBootstrapper : ISqlSchemaBootstrapper
             CREATE INDEX IX_EC_Products_GroupID ON dbo.EC_Products (GroupID);
             """);
 
+        // البروسيدر يرجع itemid الأصلي — لازم عمود إضافي للعقد مع الفرونت
+        await EnsureColumnAsync(connection, "EC_Products", "ItemId", "bigint NULL", cancellationToken);
+
         // ====== EC_Orders ======
         await CreateTableIfMissingAsync(connection, "EC_Orders", cancellationToken, """
             CREATE TABLE dbo.EC_Orders (

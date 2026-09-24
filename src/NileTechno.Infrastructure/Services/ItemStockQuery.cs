@@ -638,7 +638,7 @@ public class ItemStockQuery : IItemStockQuery
         GroupName = ReadString(reader, "groupname")
     };
 
-    private static string ReadString(SqlDataReader reader, string column)
+    internal static string ReadString(SqlDataReader reader, string column)
     {
         var ordinal = FindOrdinal(reader, column);
         if (ordinal is null || reader.IsDBNull(ordinal.Value))
@@ -647,7 +647,7 @@ public class ItemStockQuery : IItemStockQuery
         return Convert.ToString(reader.GetValue(ordinal.Value))?.Trim() ?? string.Empty;
     }
 
-    private static decimal ReadDecimal(SqlDataReader reader, string column)
+    internal static decimal ReadDecimal(SqlDataReader reader, string column)
     {
         var ordinal = FindOrdinal(reader, column);
         if (ordinal is null || reader.IsDBNull(ordinal.Value))

@@ -84,6 +84,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
 
         builder.Entity<StockOverride>(e =>
         {
+            e.ToTable("Ec_StockOverrides");
             e.HasIndex(s => s.ItemCode).IsUnique();
             e.Property(s => s.Quantity).HasColumnType("decimal(18,2)");
         });

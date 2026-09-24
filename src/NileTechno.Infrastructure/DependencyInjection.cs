@@ -59,7 +59,12 @@ public static class DependencyInjection
 
         services.AddScoped<IEmailService, EmailService>();
 
-        services.AddScoped<IItemStockQuery, ItemStockQuery>();
+        // ItemStockQuery = live ERP source (admin stock + catalog sync input).
+        // EcProductCatalogQuery = storefront reads from EC_Products.
+        services.AddScoped<ItemStockQuery>();
+        services.AddScoped<IItemStockQuery, EcProductCatalogQuery>();
+
+        services.AddHostedService<ProductCatalogSyncService>();
 
         return services;
     }
