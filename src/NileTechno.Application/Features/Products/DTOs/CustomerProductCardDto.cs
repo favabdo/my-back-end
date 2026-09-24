@@ -9,4 +9,6 @@ public class CustomerProductCardDto
     public string GroupName { get; init; } = string.Empty;
     public decimal Stock { get; init; }
     public decimal Price { get; set; }
+    public string? Image { get; init; }
+    public string? Description { get; init; }
 }

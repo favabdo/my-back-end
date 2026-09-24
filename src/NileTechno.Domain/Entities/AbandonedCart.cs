@@ -4,7 +4,7 @@ namespace NileTechno.Domain.Entities;
 
 public class AbandonedCart : BaseEntity
 {
-    public Guid? UserId { get; set; }
+    public string? UserId { get; set; }
     public string CustomerName { get; set; } = "زائر المتجر";
     public string? CustomerPhone { get; set; }
     public string? CustomerEmail { get; set; }

@@ -8,7 +8,6 @@ using NileTechno.Application.Common.Interfaces;
 using NileTechno.Infrastructure.Configuration;
 using NileTechno.Infrastructure.Identity;
 using NileTechno.Infrastructure.Persistence;
-using NileTechno.Infrastructure.Repositories;
 using NileTechno.Infrastructure.Services;
 
 namespace NileTechno.Infrastructure;
@@ -50,9 +49,9 @@ public static class DependencyInjection
         services.AddScoped<IIdentityService, IdentityService>();
         services.AddSingleton<IDateTime, DateTimeService>();
         services.AddScoped<ITokenService, TokenService>();
-        services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<ILoginAccountStore, LoginAccountStore>();
         services.AddScoped<ILoginSecretHasher, LoginSecretHasher>();
+        services.AddSingleton<IAdminRoleProvider, AdminRoleProvider>();
         services.AddScoped<IAuthSessionService, AuthSessionService>();
         services.AddScoped<IGoogleTokenValidator, GoogleTokenValidator>();
         services.AddScoped<ISqlSchemaBootstrapper, SqlSchemaBootstrapper>();
@@ -62,7 +61,8 @@ public static class DependencyInjection
         // ItemStockQuery = live ERP source (admin stock + catalog sync input).
         // EcProductCatalogQuery = storefront reads from EC_Products.
         services.AddScoped<ItemStockQuery>();
-        services.AddScoped<IItemStockQuery, EcProductCatalogQuery>();
+        services.AddScoped<EcProductCatalogQuery>();
+        services.AddScoped<IItemStockQuery>(sp => sp.GetRequiredService<EcProductCatalogQuery>());
 
         services.AddHostedService<ProductCatalogSyncService>();
 

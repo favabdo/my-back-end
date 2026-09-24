@@ -24,7 +24,9 @@ public class EcProductCatalogQuery : IItemStockQuery
             ISNULL(g.Code, '') AS groupid,
             ISNULL(g.Name, '') AS groupname,
             CONVERT(decimal(18,2), p.Stock) AS stock,
-            p.Price AS price
+            p.Price AS price,
+            p.ProductImg AS image,
+            p.Description AS description
         FROM dbo.EC_Products AS p
         LEFT JOIN dbo.EC_Groups AS g ON g.Id = p.GroupID
         WHERE p.Status = 1
@@ -145,7 +147,9 @@ public class EcProductCatalogQuery : IItemStockQuery
                 ISNULL(g.Code, '') AS groupid,
                 ISNULL(g.Name, '') AS groupname,
                 CONVERT(decimal(18,2), p.Stock) AS stock,
-                p.Price AS price
+                p.Price AS price,
+                p.ProductImg AS image,
+                p.Description AS description
             FROM dbo.EC_Products AS p
             LEFT JOIN dbo.EC_Groups AS g ON g.Id = p.GroupID
             WHERE p.Status = 1 AND (p.GroupID IS NULL OR g.Status = 1) AND p.Code = @itemCode
@@ -233,6 +237,38 @@ public class EcProductCatalogQuery : IItemStockQuery
         return map;
     }
 
+
+    public async Task<IReadOnlyDictionary<string, CustomerProductCardDto>> GetProductsByCodesAsync(
+        IReadOnlyCollection<string> codes,
+        CancellationToken cancellationToken = default)
+    {
+        var wanted = codes.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var map = new Dictionary<string, CustomerProductCardDto>(StringComparer.OrdinalIgnoreCase);
+        if (wanted.Count == 0)
+            return map;
+
+        var paramNames = new List<string>();
+        var sql = CatalogSelect + " AND p.Code IN (";
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+
+        for (var i = 0; i < wanted.Count; i++)
+        {
+            paramNames.Add($"@code{i}");
+            command.Parameters.Add(new SqlParameter($"@code{i}", SqlDbType.NVarChar, 50) { Value = wanted[i] });
+        }
+
+        command.CommandText = sql + string.Join(", ", paramNames) + ")";
+        command.CommandTimeout = 60;
+        AddFilterParameters(command, groupId: null, search: null);
+
+        foreach (var item in await ReadCatalogAsync(command, cancellationToken))
+            map[item.ItemCode] = item;
+        return map;
+    }
+
     private static void AddFilterParameters(SqlCommand command, string? groupId, string? search)
     {
         command.Parameters.Add(new SqlParameter("@groupId", SqlDbType.NVarChar, 100)
@@ -261,7 +297,9 @@ public class EcProductCatalogQuery : IItemStockQuery
                 GroupId = ItemStockQuery.ReadString(reader, "groupid"),
                 GroupName = ItemStockQuery.ReadString(reader, "groupname"),
                 Stock = ItemStockQuery.ReadDecimal(reader, "stock"),
-                Price = ItemStockQuery.ReadDecimal(reader, "price")
+                Price = ItemStockQuery.ReadDecimal(reader, "price"),
+                Image = ItemStockQuery.ReadString(reader, "image"),
+                Description = ItemStockQuery.ReadString(reader, "description")
             });
         }
 

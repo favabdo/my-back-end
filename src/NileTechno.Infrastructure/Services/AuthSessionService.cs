@@ -10,19 +10,23 @@ public class AuthSessionService : IAuthSessionService
     private readonly ITokenService _tokenService;
     private readonly ILoginAccountStore _loginAccounts;
     private readonly IConfiguration _configuration;
+    private readonly IAdminRoleProvider _adminRoles;
 
     public AuthSessionService(
         ITokenService tokenService,
         ILoginAccountStore loginAccounts,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IAdminRoleProvider adminRoles)
     {
         _tokenService = tokenService;
         _loginAccounts = loginAccounts;
         _configuration = configuration;
+        _adminRoles = adminRoles;
     }
 
     public async Task<AuthResponseDto> IssueAsync(LoginAccount account, IList<string> roles, CancellationToken cancellationToken = default)
     {
+        roles = _adminRoles.ResolveRoles(account.Email);
         var tokens = _tokenService.GenerateTokens(account.Id, account.Email, account.FullName, roles);
         var refreshExpiryDays = _configuration.GetSection("Jwt").GetValue<int>("RefreshTokenExpiryDays", 30);
 

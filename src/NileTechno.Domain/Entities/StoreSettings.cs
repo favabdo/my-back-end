@@ -12,11 +12,12 @@ public class StoreSettings : BaseEntity
     public decimal FreeShippingMin { get; set; }
     public string? AnnouncementText { get; set; }
     public bool AnnouncementEnabled { get; set; }
+    public string? ExtraJson { get; set; }
 }
 
 public class UserAddress : BaseEntity
 {
-    public Guid UserId { get; set; }
+    public string UserId { get; set; } = string.Empty;
     public string Label { get; set; } = string.Empty;
     public string Governorate { get; set; } = string.Empty;
     public string Details { get; set; } = string.Empty;

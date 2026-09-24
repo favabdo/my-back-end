@@ -40,6 +40,14 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
     {
         base.OnModelCreating(builder);
 
+        builder.Entity<ApplicationUser>(e => e.ToTable("Ec_AspNetUsers"));
+        builder.Entity<IdentityRole<Guid>>(e => e.ToTable("Ec_AspNetRoles"));
+        builder.Entity<IdentityUserRole<Guid>>(e => e.ToTable("Ec_AspNetUserRoles"));
+        builder.Entity<IdentityUserClaim<Guid>>(e => e.ToTable("Ec_AspNetUserClaims"));
+        builder.Entity<IdentityUserLogin<Guid>>(e => e.ToTable("Ec_AspNetUserLogins"));
+        builder.Entity<IdentityUserToken<Guid>>(e => e.ToTable("Ec_AspNetUserTokens"));
+        builder.Entity<IdentityRoleClaim<Guid>>(e => e.ToTable("Ec_AspNetRoleClaims"));
+
         builder.Entity<Product>(e =>
         {
             e.Property(p => p.Price).HasColumnType("decimal(18,2)");
@@ -52,6 +60,9 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
 
         builder.Entity<Order>(e =>
         {
+            e.ToTable("Ec_Orders");
+            e.Property(o => o.Id).ValueGeneratedOnAdd();
+            e.Property(o => o.CustomerNotes).HasColumnName("Notes");
             e.HasIndex(o => o.OrderNumber).IsUnique();
             e.Property(o => o.Subtotal).HasColumnType("decimal(18,2)");
             e.Property(o => o.ShippingCost).HasColumnType("decimal(18,2)");
@@ -71,11 +82,21 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
 
         builder.Entity<OrderItem>(e =>
         {
+            e.ToTable("Ec_OrderItems");
+            e.Property(i => i.Id).ValueGeneratedOnAdd();
+            e.Property(i => i.ProductId).HasMaxLength(50);
             e.Property(i => i.UnitPrice).HasColumnType("decimal(18,2)");
+        });
+
+        builder.Entity<OrderHistoryEntry>(e =>
+        {
+            e.ToTable("Ec_OrderHistoryEntries");
+            e.Property(h => h.Id).ValueGeneratedOnAdd();
         });
 
         builder.Entity<Review>(e =>
         {
+            e.ToTable("Ec_Reviews");
             e.HasIndex(r => r.ExternalId);
             e.HasIndex(r => r.ProductId);
             e.Property(r => r.ProductId).HasMaxLength(100);
@@ -91,38 +112,56 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
 
         builder.Entity<AnalyticsSearch>(e =>
         {
+            e.ToTable("Ec_AnalyticsSearches");
             e.HasIndex(s => s.Term).IsUnique();
         });
 
         builder.Entity<AnalyticsProductView>(e =>
         {
+            e.ToTable("Ec_AnalyticsProductViews");
             e.HasIndex(s => s.ProductId).IsUnique();
         });
 
         builder.Entity<Coupon>(e =>
         {
+            e.ToTable("Ec_Coupons");
             e.HasIndex(c => c.Code).IsUnique();
             e.Property(c => c.DiscountPercent).HasColumnType("decimal(5,2)");
         });
 
         builder.Entity<ShippingZone>(e =>
         {
+            e.ToTable("Ec_ShippingZones");
             e.HasIndex(s => s.Code).IsUnique();
             e.Property(s => s.Price).HasColumnType("decimal(18,2)");
         });
 
         builder.Entity<CartItem>(e =>
         {
-            e.HasIndex(c => new { c.UserId, c.ProductId });
+            e.ToTable("Ec_CartItems");
+            e.Property(c => c.UserId).HasMaxLength(64);
+            e.Property(c => c.ProductId).HasMaxLength(50);
+            e.HasIndex(c => new { c.UserId, c.ProductId, c.SelectedColor, c.SelectedSize });
         });
 
         builder.Entity<WishlistItem>(e =>
         {
+            e.ToTable("Ec_WishlistItems");
+            e.Property(w => w.UserId).HasMaxLength(64);
+            e.Property(w => w.ProductId).HasMaxLength(50);
             e.HasIndex(w => new { w.UserId, w.ProductId }).IsUnique();
+        });
+
+        builder.Entity<UserAddress>(e =>
+        {
+            e.ToTable("Ec_UserAddresses");
+            e.Property(a => a.UserId).HasMaxLength(64);
         });
 
         builder.Entity<AbandonedCart>(e =>
         {
+            e.ToTable("Ec_AbandonedCarts");
+            e.Property(a => a.UserId).HasMaxLength(64);
             e.Property(a => a.Total).HasColumnType("decimal(18,2)");
             e.HasMany(a => a.Items)
                 .WithOne(i => i.AbandonedCart)
@@ -132,11 +171,18 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
 
         builder.Entity<AbandonedCartItem>(e =>
         {
+            e.ToTable("Ec_AbandonedCartItems");
             e.Property(i => i.Price).HasColumnType("decimal(18,2)");
+        });
+
+        builder.Entity<ActivityLog>(e =>
+        {
+            e.ToTable("Ec_ActivityLogs");
         });
 
         builder.Entity<StoreSettings>(e =>
         {
+            e.ToTable("Ec_StoreSettingsList");
             e.Property(s => s.FreeShippingMin).HasColumnType("decimal(18,2)");
         });
 

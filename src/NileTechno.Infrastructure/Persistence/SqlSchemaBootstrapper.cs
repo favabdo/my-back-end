@@ -359,6 +359,85 @@ public class SqlSchemaBootstrapper : ISqlSchemaBootstrapper
         await ExecuteAsync(connection, $"ALTER TABLE dbo.{table} ADD {column} {sqlType};", cancellationToken);
     }
 
+    private async Task WidenColumnAsync(SqlConnection connection, string table, string column, string newTypeSql, int minLength, CancellationToken cancellationToken)
+    {
+        await using var check = connection.CreateCommand();
+        check.CommandText = """
+            DECLARE @len int = -1;
+            SELECT @len = CASE WHEN c.max_length = -1 THEN 4000 ELSE c.max_length / 2 END
+            FROM sys.columns c
+            INNER JOIN sys.types ty ON c.user_type_id = ty.user_type_id
+            WHERE c.object_id = OBJECT_ID(N'dbo.' + @table) AND c.name = @col AND ty.name = N'nvarchar';
+            SELECT @len;
+            """;
+        check.Parameters.AddWithValue("@table", table);
+        check.Parameters.AddWithValue("@col", column);
+        var raw = await check.ExecuteScalarAsync(cancellationToken);
+        var current = (raw is null or DBNull) ? -1 : Convert.ToInt32(raw);
+        if (current >= 0 && current < minLength)
+        {
+            _logger.LogInformation("Widening dbo.{Table}.{Column} to {Type}", table, column, newTypeSql);
+            await ExecuteAsync(connection, $"ALTER TABLE dbo.{table} ALTER COLUMN {column} {newTypeSql};", cancellationToken);
+        }
+    }
+
+    private async Task DropEmptyTableIfShapeChangedAsync(
+        SqlConnection connection,
+        string table,
+        string sentinelColumn,
+        string? wrongColumnType,
+        CancellationToken cancellationToken)
+    {
+        await using var check = connection.CreateCommand();
+        check.CommandText = """
+            DECLARE @shape int = 0;
+            IF OBJECT_ID(N'dbo.' + @table) IS NOT NULL
+            BEGIN
+                IF @wrongType IS NULL
+                    SET @shape = CASE WHEN COL_LENGTH(N'dbo.' + @table, @col) IS NULL THEN 1 ELSE 0 END;
+                ELSE
+                    SET @shape = CASE WHEN EXISTS (
+                            SELECT 1 FROM sys.columns c
+                            INNER JOIN sys.types ty ON c.user_type_id = ty.user_type_id
+                            WHERE c.object_id = OBJECT_ID(N'dbo.' + @table)
+                              AND c.name = @col AND ty.name = @wrongType) THEN 1 ELSE 0 END;
+            END
+            SELECT @shape;
+            """;
+        check.Parameters.AddWithValue("@table", table);
+        check.Parameters.AddWithValue("@col", sentinelColumn);
+        check.Parameters.AddWithValue("@wrongType", (object?)wrongColumnType ?? DBNull.Value);
+        var needsWork = Convert.ToInt32(await check.ExecuteScalarAsync(cancellationToken)) == 1;
+        if (!needsWork)
+            return;
+
+        await using var count = connection.CreateCommand();
+        count.CommandText = $"SELECT COUNT(*) FROM dbo.{table};";
+        var rows = Convert.ToInt32(await count.ExecuteScalarAsync(cancellationToken));
+        if (rows > 0)
+        {
+            _logger.LogWarning("dbo.{Table} has the legacy shape but holds {Rows} rows; leaving it untouched", table, rows);
+            return;
+        }
+
+        _logger.LogInformation("Dropping empty legacy-shaped table dbo.{Table} for recreation", table);
+
+        await using var fkDrop = connection.CreateCommand();
+        fkDrop.CommandText = """
+            DECLARE @sql nvarchar(max) = N'';
+            SELECT @sql += N'ALTER TABLE ' + QUOTENAME(OBJECT_SCHEMA_NAME(fk.parent_object_id)) + N'.'
+                        + QUOTENAME(OBJECT_NAME(fk.parent_object_id)) + N' DROP CONSTRAINT '
+                        + QUOTENAME(fk.name) + N';'
+            FROM sys.foreign_keys fk
+            WHERE fk.referenced_object_id = OBJECT_ID(N'dbo.' + @table);
+            IF @sql <> N'' EXEC sp_executesql @sql;
+            """;
+        fkDrop.Parameters.AddWithValue("@table", table);
+        await fkDrop.ExecuteNonQueryAsync(cancellationToken);
+
+        await ExecuteAsync(connection, $"DROP TABLE dbo.{table};", cancellationToken);
+    }
+
     private static async Task EnsureIndexAsync(
         SqlConnection connection,
         string table,
@@ -437,25 +516,7 @@ public class SqlSchemaBootstrapper : ISqlSchemaBootstrapper
         // البروسيدر يرجع itemid الأصلي — لازم عمود إضافي للعقد مع الفرونت
         await EnsureColumnAsync(connection, "EC_Products", "ItemId", "bigint NULL", cancellationToken);
 
-        // ====== EC_Orders ======
-        await CreateTableIfMissingAsync(connection, "EC_Orders", cancellationToken, """
-            CREATE TABLE dbo.EC_Orders (
-                Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_EC_Orders PRIMARY KEY,
-                CustomerID int NOT NULL,
-                RegionID int NOT NULL,
-                PhoneNumber nvarchar(50) NOT NULL,
-                Price decimal(18,2) NOT NULL CONSTRAINT DF_EC_Orders_Price DEFAULT (0),
-                ShipPrice decimal(18,2) NOT NULL CONSTRAINT DF_EC_Orders_ShipPrice DEFAULT (0),
-                Total decimal(18,2) NOT NULL CONSTRAINT DF_EC_Orders_Total DEFAULT (0),
-                Notes nvarchar(max) NULL,
-                Status int NOT NULL CONSTRAINT DF_EC_Orders_Status DEFAULT (0),
-                CreatedAt datetime2 NOT NULL CONSTRAINT DF_EC_Orders_CreatedAt DEFAULT (SYSUTCDATETIME()),
-                UpdatedAt datetime2 NULL
-            );
-            CREATE INDEX IX_EC_Orders_CustomerID ON dbo.EC_Orders (CustomerID);
-            CREATE INDEX IX_EC_Orders_RegionID ON dbo.EC_Orders (RegionID);
-            CREATE INDEX IX_EC_Orders_Status ON dbo.EC_Orders (Status);
-            """);
+        // EC_Orders is defined below as Ec_Orders in storefront order shape
 
         // ====== Ec_Cart ======
         await RenameTableIfNeededAsync(connection, "Cart", "Ec_Cart", cancellationToken);
@@ -510,6 +571,7 @@ public class SqlSchemaBootstrapper : ISqlSchemaBootstrapper
         await RenameTableIfNeededAsync(connection, "AnalyticsProductViews", "Ec_AnalyticsProductViews", cancellationToken);
 
         // ====== Orders subsystem ======
+        await DropEmptyTableIfShapeChangedAsync(connection, "Ec_Orders", "OrderNumber", null, cancellationToken);
         await CreateTableIfMissingAsync(connection, "Ec_Orders", cancellationToken, """
             CREATE TABLE dbo.Ec_Orders (
                 Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_Orders PRIMARY KEY,
@@ -522,10 +584,11 @@ public class SqlSchemaBootstrapper : ISqlSchemaBootstrapper
                 CustomerPhone nvarchar(50) NOT NULL,
                 CustomerEmail nvarchar(256) NULL,
                 Governorate nvarchar(100) NULL,
-                AddressDetails nvarchar(1000) NULL,
+                AddressDetails nvarchar(max) NULL,
                 Latitude float NULL,
                 Longitude float NULL,
-                PaymentMethod nvarchar(20) NOT NULL CONSTRAINT DF_Orders_PaymentMethod DEFAULT ('cod'),
+                PaymentMethod nvarchar(100) NOT NULL CONSTRAINT DF_Orders_PaymentMethod DEFAULT ('cod'),
+                Notes nvarchar(max) NULL,
                 CouponCode nvarchar(50) NULL,
                 DiscountAmount decimal(18,2) NOT NULL CONSTRAINT DF_Orders_DiscountAmount DEFAULT (0),
                 ShippingCost decimal(18,2) NOT NULL CONSTRAINT DF_Orders_ShippingCost DEFAULT (0),
@@ -540,11 +603,17 @@ public class SqlSchemaBootstrapper : ISqlSchemaBootstrapper
             CREATE INDEX IX_Orders_UserId ON dbo.Ec_Orders (UserId);
             """);
 
+        await EnsureColumnAsync(connection, "Ec_Orders", "Notes", "nvarchar(max) NULL", cancellationToken);
+        await WidenColumnAsync(connection, "Ec_Orders", "PaymentMethod", "nvarchar(100) NOT NULL", 100, cancellationToken);
+        await WidenColumnAsync(connection, "Ec_Orders", "AddressDetails", "nvarchar(max) NULL", 4000, cancellationToken);
+        await EnsureColumnAsync(connection, "Ec_StoreSettingsList", "ExtraJson", "nvarchar(max) NULL", cancellationToken);
+
+        await DropEmptyTableIfShapeChangedAsync(connection, "Ec_OrderItems", "ProductId", "int", cancellationToken);
         await CreateTableIfMissingAsync(connection, "Ec_OrderItems", cancellationToken, """
             CREATE TABLE dbo.Ec_OrderItems (
                 Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_OrderItems PRIMARY KEY,
                 OrderId int NOT NULL,
-                ProductId int NOT NULL,
+                ProductId nvarchar(50) NOT NULL,
                 ProductName nvarchar(200) NOT NULL,
                 ProductImage nvarchar(500) NULL,
                 UnitPrice decimal(18,2) NOT NULL,
@@ -659,11 +728,12 @@ public class SqlSchemaBootstrapper : ISqlSchemaBootstrapper
             """);
 
         // ====== Customer baskets ======
+        await DropEmptyTableIfShapeChangedAsync(connection, "Ec_CartItems", "UserId", "uniqueidentifier", cancellationToken);
         await CreateTableIfMissingAsync(connection, "Ec_CartItems", cancellationToken, """
             CREATE TABLE dbo.Ec_CartItems (
                 Id uniqueidentifier NOT NULL CONSTRAINT PK_CartItems PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
-                UserId uniqueidentifier NOT NULL,
-                ProductId uniqueidentifier NOT NULL,
+                UserId nvarchar(64) NOT NULL,
+                ProductId nvarchar(50) NOT NULL,
                 Quantity int NOT NULL CONSTRAINT DF_CartItems_Quantity DEFAULT (1),
                 SelectedColor nvarchar(50) NULL,
                 SelectedSize nvarchar(50) NULL,
@@ -673,21 +743,23 @@ public class SqlSchemaBootstrapper : ISqlSchemaBootstrapper
             CREATE INDEX IX_CartItems_UserId_ProductId ON dbo.Ec_CartItems (UserId, ProductId);
             """);
 
+        await DropEmptyTableIfShapeChangedAsync(connection, "Ec_WishlistItems", "UserId", "uniqueidentifier", cancellationToken);
         await CreateTableIfMissingAsync(connection, "Ec_WishlistItems", cancellationToken, """
             CREATE TABLE dbo.Ec_WishlistItems (
                 Id uniqueidentifier NOT NULL CONSTRAINT PK_WishlistItems PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
-                UserId uniqueidentifier NOT NULL,
-                ProductId uniqueidentifier NOT NULL,
+                UserId nvarchar(64) NOT NULL,
+                ProductId nvarchar(50) NOT NULL,
                 CreatedAt datetime2 NOT NULL CONSTRAINT DF_WishlistItems_CreatedAt DEFAULT (SYSUTCDATETIME()),
                 UpdatedAt datetime2 NULL
             );
             CREATE UNIQUE INDEX IX_WishlistItems_UserId_ProductId ON dbo.Ec_WishlistItems (UserId, ProductId);
             """);
 
+        await DropEmptyTableIfShapeChangedAsync(connection, "Ec_AbandonedCarts", "UserId", "uniqueidentifier", cancellationToken);
         await CreateTableIfMissingAsync(connection, "Ec_AbandonedCarts", cancellationToken, """
             CREATE TABLE dbo.Ec_AbandonedCarts (
                 Id uniqueidentifier NOT NULL CONSTRAINT PK_AbandonedCarts PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
-                UserId uniqueidentifier NULL,
+                UserId nvarchar(64) NULL,
                 CustomerName nvarchar(200) NOT NULL CONSTRAINT DF_AbandonedCarts_CustomerName DEFAULT (N'زائر المتجر'),
                 CustomerPhone nvarchar(50) NULL,
                 CustomerEmail nvarchar(256) NULL,
@@ -737,15 +809,17 @@ public class SqlSchemaBootstrapper : ISqlSchemaBootstrapper
                 FreeShippingMin decimal(18,2) NOT NULL CONSTRAINT DF_StoreSettingsList_FreeShippingMin DEFAULT (0),
                 AnnouncementText nvarchar(max) NULL,
                 AnnouncementEnabled bit NOT NULL CONSTRAINT DF_StoreSettingsList_AnnouncementEnabled DEFAULT (0),
+                ExtraJson nvarchar(max) NULL,
                 CreatedAt datetime2 NOT NULL CONSTRAINT DF_StoreSettingsList_CreatedAt DEFAULT (SYSUTCDATETIME()),
                 UpdatedAt datetime2 NULL
             );
             """);
 
+        await DropEmptyTableIfShapeChangedAsync(connection, "Ec_UserAddresses", "UserId", "uniqueidentifier", cancellationToken);
         await CreateTableIfMissingAsync(connection, "Ec_UserAddresses", cancellationToken, """
             CREATE TABLE dbo.Ec_UserAddresses (
                 Id uniqueidentifier NOT NULL CONSTRAINT PK_UserAddresses PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
-                UserId uniqueidentifier NOT NULL,
+                UserId nvarchar(64) NOT NULL,
                 Label nvarchar(100) NOT NULL,
                 Governorate nvarchar(100) NOT NULL,
                 Details nvarchar(500) NULL,
