@@ -132,7 +132,6 @@ public class ProductCatalogSyncService : BackgroundService
         ON t.Code = s.Code
         WHEN MATCHED THEN UPDATE SET
             Name = s.Name,
-            Status = 1,
             UpdatedAt = SYSUTCDATETIME()
         WHEN NOT MATCHED THEN INSERT (ServerId, Code, Name, Status)
             VALUES (0, s.Code, s.Name, 1);
@@ -151,13 +150,15 @@ public class ProductCatalogSyncService : BackgroundService
             GROUP BY LEFT(LTRIM(RTRIM(r.itemcode)), 50)
         ) AS s
         ON t.Code = s.Code
+        -- Status=1 for newly seen products only; existing rows keep the owner's Status
+        -- and are auto-hidden (Status=0) only when the stock reaches zero.
         WHEN MATCHED THEN UPDATE SET
             ItemId = s.ItemId,
             Name = s.Name,
             Stock = CAST(ROUND(s.StockQty, 0) AS int),
             Price = CAST(ROUND(ISNULL(s.Price, 0), 2) AS decimal(18,2)),
             GroupID = s.GroupRowId,
-            Status = 1,
+            Status = CASE WHEN ROUND(s.StockQty, 0) <= 0 THEN 0 ELSE t.Status END,
             LastUpdate = SYSUTCDATETIME(),
             UpdatedAt = SYSUTCDATETIME()
         WHEN NOT MATCHED THEN INSERT
@@ -165,11 +166,16 @@ public class ProductCatalogSyncService : BackgroundService
             VALUES (0, s.Code, s.ItemId, s.Name, s.GroupRowId,
                     CAST(ROUND(s.StockQty, 0) AS int),
                     CAST(ROUND(ISNULL(s.Price, 0), 2) AS decimal(18,2)),
-                    0, 1, SYSUTCDATETIME());
+                    0,
+                    CASE WHEN ROUND(s.StockQty, 0) > 0 THEN 1 ELSE 0 END,
+                    SYSUTCDATETIME());
 
-        -- الأصناف التي اختفت من البروسيدير (موقوفة/محذوفة في ERP) تُخرج من الكتالوج
+        -- الأصناف التي اختفت من البروسيدير (خلصت من ERP): السطر يبقى موجود
+        -- والاستوك يتصفّر، وقاعدة "الاستوك صفر ⇒ Status صفر" تُخفيه تلقائيًا
         UPDATE p
-        SET p.Status = 0,
+        SET p.Stock = 0,
+            p.Status = 0,
+            p.LastUpdate = SYSUTCDATETIME(),
             p.UpdatedAt = SYSUTCDATETIME()
         FROM dbo.EC_Products AS p
         WHERE p.Status = 1
