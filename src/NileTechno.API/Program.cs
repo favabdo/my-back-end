@@ -107,11 +107,16 @@ using (var scope = app.Services.CreateScope())
     await schema.EnsureAsync();
 }
 
-if (app.Environment.IsDevelopment())
+// Swagger app: serves the bundled OpenAPI spec at /api/swagger in every environment
+var openapiSpecPath = Path.Combine(AppContext.BaseDirectory, "openapi", "niletechno-openapi.yaml");
+app.MapGet("/openapi/niletechno-openapi.yaml", () =>
+    Results.Content(File.ReadAllText(openapiSpecPath), "application/yaml"));
+
+app.UseSwaggerUI(c =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+    c.SwaggerEndpoint("/openapi/niletechno-openapi.yaml", "NileTechno API");
+    c.RoutePrefix = "api/swagger";
+});
 
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseCors(CorsPolicy);

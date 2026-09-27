@@ -9,6 +9,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Content Include="openapi\niletechno-openapi.yaml" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\NileTechno.Application\NileTechno.Application.csproj" />
     <ProjectReference Include="..\NileTechno.Infrastructure\NileTechno.Infrastructure.csproj" />
   </ItemGroup>

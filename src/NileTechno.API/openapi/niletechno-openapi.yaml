@@ -1,0 +1,1954 @@
+openapi: 3.0.3
+info:
+  title: NileTechno API
+  description: |
+    Frontend API Reference for NileTechno E-Commerce API.
+    JSON fields use camelCase. Public product/catalog data only includes active ERP products/groups.
+  version: 1.0.0
+
+servers:
+  - url: https://my-back-end-jayl.onrender.com
+    description: Production
+  - url: http://localhost:5080
+    description: Local Development
+
+tags:
+  - name: Health
+  - name: Authentication
+  - name: Products
+  - name: Stock
+  - name: Orders
+  - name: Reviews
+  - name: Cart
+  - name: Wishlist
+  - name: Addresses
+  - name: Coupons
+  - name: Shipping & Payment
+  - name: Store Settings
+  - name: Users
+  - name: Abandoned Carts
+  - name: Activity Logs
+  - name: Analytics
+  - name: AI Smart Search
+  - name: Email
+
+security:
+  - {}
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access token. Expires after 60 minutes.
+
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        title: { type: string }
+        status: { type: integer }
+        errors:
+          type: array
+          items: { type: string }
+
+    ErrorArrayResponse:
+      type: object
+      properties:
+        errors:
+          type: array
+          items: { type: string }
+
+    SuccessResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+
+    MessageResponse:
+      type: object
+      properties:
+        message: { type: string }
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, format: password }
+
+    RegisterRequest:
+      type: object
+      required: [email, password, fullName]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, format: password }
+        fullName: { type: string }
+
+    AuthResponse:
+      type: object
+      properties:
+        userId: { type: integer }
+        email: { type: string, format: email }
+        fullName: { type: string }
+        roles:
+          type: array
+          items: { type: string }
+        accessToken: { type: string }
+        accessTokenExpiresAtUtc: { type: string, format: date-time }
+        refreshToken: { type: string }
+        loyaltyPoints: { type: integer }
+        phone: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        authProvider:
+          type: string
+          enum: [Password, Google]
+
+    GoogleAuthRequest:
+      type: object
+      properties:
+        accessToken: { type: string }
+        idToken: { type: string }
+      description: Send either accessToken or idToken.
+
+    RefreshTokenRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string }
+
+    Profile:
+      type: object
+      properties:
+        userId: { type: integer }
+        email: { type: string, format: email }
+        fullName: { type: string }
+        phone: { type: string, nullable: true }
+        loyaltyPoints: { type: integer }
+        authProvider: { type: string }
+        emailConfirmed: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        lastLoginAt: { type: string, format: date-time, nullable: true }
+
+    ProfileUpdateRequest:
+      type: object
+      properties:
+        fullName: { type: string }
+        phone: { type: string }
+
+    ChangePasswordRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword: { type: string, format: password }
+        newPassword: { type: string, format: password, minLength: 6 }
+
+    ForgotPasswordRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+
+    ResetPasswordRequest:
+      type: object
+      required: [email, token, newPassword]
+      properties:
+        email: { type: string, format: email }
+        token: { type: string }
+        newPassword: { type: string, format: password }
+
+    EmailRequest:
+      type: object
+      required: [email, name]
+      properties:
+        email: { type: string, format: email }
+        name: { type: string }
+
+    VerificationEmailRequest:
+      allOf:
+        - $ref: '#/components/schemas/EmailRequest'
+        - type: object
+          required: [verificationLink]
+          properties:
+            verificationLink: { type: string, format: uri }
+
+    PasswordResetEmailRequest:
+      allOf:
+        - $ref: '#/components/schemas/EmailRequest'
+        - type: object
+          required: [resetLink]
+          properties:
+            resetLink: { type: string, format: uri }
+
+    LoginNotificationRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+        name: { type: string }
+        ipAddress: { type: string }
+        device: { type: string }
+
+    OrderStatusEmailRequest:
+      type: object
+      required: [order, newStatus, email, name]
+      properties:
+        order: { type: object, additionalProperties: true }
+        newStatus: { type: string }
+        email: { type: string, format: email }
+        name: { type: string }
+
+    GenericEmailRequest:
+      type: object
+      required: [toEmail, subject, title, messageHtml]
+      properties:
+        toEmail: { type: string, format: email }
+        subject: { type: string }
+        title: { type: string }
+        messageHtml: { type: string }
+
+    Product:
+      type: object
+      properties:
+        itemCode: { type: string, example: "12668" }
+        itemId: { type: string, example: "66570" }
+        itemName: { type: string }
+        groupId: { type: string }
+        groupName: { type: string }
+        stock: { type: number, format: double }
+        price: { type: number, format: double }
+        image: { type: string }
+        description: { type: string }
+
+    Category:
+      type: object
+      properties:
+        groupId: { type: string }
+        groupName: { type: string }
+        itemCount: { type: integer }
+
+    PaginatedProductList:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Product' }
+        pageNumber: { type: integer }
+        pageSize: { type: integer }
+        totalPages: { type: integer }
+        totalCount: { type: integer }
+        hasPreviousPage: { type: boolean }
+        hasNextPage: { type: boolean }
+
+    StockResponse:
+      type: object
+      additionalProperties:
+        type: number
+        format: double
+
+    ProductStock:
+      type: object
+      properties:
+        productId: { type: string }
+        stock: { type: number, format: double }
+
+    StockDecrementItem:
+      type: object
+      required: [productId, quantity]
+      properties:
+        productId: { type: string }
+        quantity: { type: number, format: double }
+
+    StockDecrementRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/StockDecrementItem' }
+
+    StockDecrementResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        stocks:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+
+    DetailedStock:
+      type: object
+      properties:
+        itemCode: { type: string }
+        itemName: { type: string }
+        transPkgQty1: { type: number, format: double }
+        reorderQty: { type: number, format: double }
+        storeCode: { type: string }
+        storeName: { type: string }
+        groupId: { type: string }
+        groupName: { type: string }
+
+    PaginatedStockList:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/DetailedStock' }
+        pageNumber: { type: integer }
+        pageSize: { type: integer }
+        totalPages: { type: integer }
+        totalCount: { type: integer }
+        hasPreviousPage: { type: boolean }
+        hasNextPage: { type: boolean }
+
+    Coordinates:
+      type: object
+      properties:
+        lat: { type: number, format: double }
+        lng: { type: number, format: double }
+
+    OrderItem:
+      type: object
+      required: [productId, price, quantity]
+      properties:
+        productId: { type: string }
+        name: { type: string }
+        price: { type: number, format: double }
+        quantity: { type: integer }
+        image: { type: string }
+        selectedColor: { type: string, nullable: true }
+        selectedSize: { type: string, nullable: true }
+
+    CreateOrderRequest:
+      type: object
+      required: [customerName, customerPhone, items, total]
+      properties:
+        userId: { type: string }
+        customerName: { type: string }
+        customerPhone: { type: string }
+        customerEmail: { type: string, format: email }
+        customerAddress: { type: string }
+        customerNotes: { type: string }
+        governorate: { type: string }
+        coordinates: { $ref: '#/components/schemas/Coordinates' }
+        paymentMethod: { type: string }
+        couponCode: { type: string }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/OrderItem' }
+        total: { type: number, format: double }
+        subtotal: { type: number, format: double }
+        shippingCost: { type: number, format: double }
+        discountAmount: { type: number, format: double }
+
+    OrderHistoryEntry:
+      type: object
+      properties:
+        action: { type: string }
+        actor: { type: string }
+        type: { type: string }
+        newStatus: { type: string }
+        timestamp: { type: string, format: date-time }
+
+    Order:
+      type: object
+      properties:
+        id: { type: integer }
+        orderNumber: { type: string }
+        userId: { type: string, nullable: true }
+        status:
+          type: string
+          enum: [PENDING, PROCESSING, PACKED, SHIPPED, OUT_FOR_DELIVERY, DELIVERED, CANCELED, REFUNDED]
+        cancelReason: { type: string, nullable: true }
+        internalNote: { type: string, nullable: true }
+        customerName: { type: string }
+        customerEmail: { type: string, nullable: true }
+        customerPhone: { type: string }
+        customerNotes: { type: string, nullable: true }
+        governorate: { type: string, nullable: true }
+        customerAddress: { type: string, nullable: true }
+        addressDetails: { type: string, nullable: true }
+        latitude: { type: number, format: double, nullable: true }
+        longitude: { type: number, format: double, nullable: true }
+        paymentMethod: { type: string, nullable: true }
+        couponCode: { type: string, nullable: true }
+        discountAmount: { type: number, format: double }
+        subtotal: { type: number, format: double }
+        shippingCost: { type: number, format: double }
+        total: { type: number, format: double }
+        date: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/OrderItem' }
+        history:
+          type: array
+          items: { $ref: '#/components/schemas/OrderHistoryEntry' }
+
+    UpdateOrderStatusRequest:
+      type: object
+      required: [orderId, newStatus]
+      properties:
+        orderId:
+          oneOf:
+            - { type: integer }
+            - { type: string }
+        newStatus:
+          type: string
+          enum: [PENDING, PROCESSING, PACKED, SHIPPED, OUT_FOR_DELIVERY, DELIVERED, CANCELED, REFUNDED]
+        cancelReason: { type: string }
+
+    BulkUpdateOrderStatusRequest:
+      type: object
+      required: [orderIds, newStatus]
+      properties:
+        orderIds:
+          type: array
+          items: { type: integer }
+        newStatus:
+          type: string
+          enum: [PENDING, PROCESSING, PACKED, SHIPPED, OUT_FOR_DELIVERY, DELIVERED, CANCELED, REFUNDED]
+        cancelReason: { type: string }
+
+    UpdateOrderNoteRequest:
+      type: object
+      required: [orderId, note]
+      properties:
+        orderId:
+          oneOf:
+            - { type: integer }
+            - { type: string }
+        note: { type: string }
+
+    CreateReviewRequest:
+      type: object
+      required: [productId, rating, comment, customerName]
+      properties:
+        productId: { type: string }
+        orderId: { type: integer, nullable: true }
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        comment: { type: string }
+        customerName: { type: string }
+
+    Review:
+      type: object
+      properties:
+        id: { type: string }
+        externalId: { type: string }
+        productId: { type: string }
+        orderId: { type: integer, nullable: true }
+        rating: { type: integer }
+        comment: { type: string }
+        customerName: { type: string }
+        approved: { type: boolean }
+        date: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+
+    CartItemInput:
+      type: object
+      required: [productId, quantity]
+      properties:
+        productId: { type: string }
+        quantity: { type: integer }
+        color: { type: string, nullable: true }
+        size: { type: string, nullable: true }
+
+    CartSyncRequest:
+      type: object
+      required: [userId, items]
+      properties:
+        userId: { type: string }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/CartItemInput' }
+
+    CartProduct:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        title: { type: string }
+        price: { type: number, format: double }
+        image: { type: string }
+        stock: { type: number, format: double }
+        groupId: { type: string }
+        category: { type: string }
+
+    CartItem:
+      type: object
+      properties:
+        id: { type: string }
+        productId: { type: string }
+        quantity: { type: integer }
+        color: { type: string, nullable: true }
+        size: { type: string, nullable: true }
+        product: { $ref: '#/components/schemas/CartProduct' }
+
+    CartUpsertRequest:
+      allOf:
+        - type: object
+          required: [userId]
+          properties:
+            userId: { type: string }
+        - $ref: '#/components/schemas/CartItemInput'
+
+    WishlistItem:
+      type: object
+      properties:
+        id: { type: string }
+        productId: { type: string }
+        product: { $ref: '#/components/schemas/CartProduct' }
+
+    WishlistRequest:
+      type: object
+      required: [userId, productId]
+      properties:
+        userId: { type: string }
+        productId: { type: string }
+
+    WishlistSyncRequest:
+      type: object
+      required: [userId, productIds]
+      properties:
+        userId: { type: string }
+        productIds:
+          type: array
+          items: { type: string }
+
+    Address:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        userId: { type: string }
+        label: { type: string }
+        governorate: { type: string }
+        details: { type: string }
+        latitude: { type: number, format: double, nullable: true }
+        longitude: { type: number, format: double, nullable: true }
+        isDefault: { type: boolean }
+        createdAt: { type: string, format: date-time }
+
+    AddressInput:
+      type: object
+      required: [userId, label, governorate, details, isDefault]
+      properties:
+        userId: { type: string }
+        id: { type: string, format: uuid }
+        label: { type: string }
+        governorate: { type: string }
+        details: { type: string }
+        latitude: { type: number, format: double }
+        longitude: { type: number, format: double }
+        isDefault: { type: boolean }
+
+    AddressSyncRequest:
+      type: object
+      required: [userId, addresses]
+      properties:
+        userId: { type: string }
+        addresses:
+          type: array
+          items: { $ref: '#/components/schemas/AddressInput' }
+
+    Coupon:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        discountPercent: { type: number, format: double }
+        isActive: { type: boolean }
+        expiresAt: { type: string, format: date-time, nullable: true }
+        maxUses: { type: integer, nullable: true }
+        usedCount: { type: integer }
+
+    ValidateCouponRequest:
+      type: object
+      required: [code, subtotal]
+      properties:
+        code: { type: string }
+        subtotal: { type: number, format: double }
+
+    ValidateCouponResponse:
+      type: object
+      properties:
+        valid: { type: boolean }
+        code: { type: string }
+        discountPercent: { type: number, format: double }
+        discount: { type: number, format: double }
+        error: { type: string }
+
+    CouponInput:
+      type: object
+      required: [code, discountPercent]
+      properties:
+        code: { type: string }
+        discountPercent: { type: number, format: double }
+        isActive: { type: boolean }
+        expiresAt: { type: string, format: date-time }
+        maxUses: { type: integer }
+
+    ShippingZone:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+        price: { type: number, format: double }
+        active: { type: boolean }
+
+    ShippingZoneInput:
+      type: object
+      required: [name, price, active]
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+        price: { type: number, format: double }
+        active: { type: boolean }
+
+    PaymentMethod:
+      type: object
+      properties:
+        id: { type: string, example: cod }
+        name: { type: string }
+        description: { type: string }
+
+    ShippingMethod:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        price: { type: number, format: double }
+        description: { type: string }
+
+    StoreConfig:
+      type: object
+      properties:
+        storeName: { type: string }
+        storeTitle: { type: string }
+        promoTagline: { type: string }
+        logoUrl: { type: string }
+        primaryColor: { type: string }
+        freeShippingMin: { type: number, format: double }
+        announcementText: { type: string }
+        announcementEnabled: { type: boolean }
+        extraJson: { type: string }
+
+    UserAdmin:
+      type: object
+      properties:
+        uid: { type: string }
+        userId: { type: integer }
+        email: { type: string, format: email }
+        name: { type: string }
+        fullName: { type: string }
+        phone: { type: string, nullable: true }
+        role:
+          type: string
+          enum: [main_admin, admin, user]
+        points: { type: integer }
+        isBlocked: { type: boolean }
+        authProvider: { type: string }
+        emailConfirmed: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        lastLoginAt: { type: string, format: date-time, nullable: true }
+
+    PointsRequest:
+      type: object
+      required: [points]
+      properties:
+        points: { type: integer }
+
+    AbandonedCartItem:
+      type: object
+      required: [name, price, quantity]
+      properties:
+        name: { type: string }
+        price: { type: number, format: double }
+        quantity: { type: integer }
+        image: { type: string }
+
+    AbandonedCartRequest:
+      type: object
+      required: [customerName, governorate, total, items]
+      properties:
+        id: { type: string, format: uuid }
+        userId: { type: string }
+        customerName: { type: string }
+        customerPhone: { type: string }
+        customerEmail: { type: string, format: email }
+        governorate: { type: string }
+        total: { type: number, format: double }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AbandonedCartItem' }
+
+    ActivityLog:
+      type: object
+      properties:
+        id: { type: integer }
+        actorName: { type: string }
+        action: { type: string }
+        entityType: { type: string, nullable: true }
+        entityId: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    ActivityLogRequest:
+      type: object
+      required: [action]
+      properties:
+        actorName: { type: string }
+        action: { type: string }
+        entityType: { type: string }
+        entityId: { type: string }
+
+    AnalyticsSearchRequest:
+      type: object
+      required: [query]
+      properties:
+        query: { type: string }
+
+    SmartSearchRequest:
+      type: object
+      required: [query]
+      properties:
+        query: { type: string }
+        products:
+          type: array
+          items: { $ref: '#/components/schemas/Product' }
+
+    SmartSearchRecommendation:
+      type: object
+      properties:
+        productId: { type: string }
+        matchReason: { type: string }
+        confidenceScore: { type: number, format: double }
+
+    SmartSearchResponse:
+      type: object
+      properties:
+        aiAdvice: { type: string }
+        recommendations:
+          type: array
+          maxItems: 4
+          items: { $ref: '#/components/schemas/SmartSearchRecommendation' }
+
+paths:
+  /api/health:
+    get:
+      tags: [Health]
+      summary: Health check
+      responses:
+        '200':
+          description: API and database health
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  database: { type: string, example: connected }
+                  timeUtc: { type: string, format: date-time }
+
+  /api/auth/register:
+    post:
+      tags: [Authentication]
+      summary: Register a new account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
+      responses:
+        '200':
+          description: Registered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  userId: { type: integer }
+                  emailConfirmed: { type: boolean }
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorArrayResponse' }
+
+  /api/auth/login:
+    post:
+      tags: [Authentication]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Authentication response
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        '401':
+          description: Unauthorized
+
+  /api/auth/google:
+    post:
+      tags: [Authentication]
+      summary: Google authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GoogleAuthRequest' }
+      responses:
+        '200':
+          description: Authentication response
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+        '401':
+          description: Unauthorized
+
+  /api/auth/refresh-token:
+    post:
+      tags: [Authentication]
+      summary: Refresh access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshTokenRequest' }
+      responses:
+        '200':
+          description: New authentication response
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResponse' }
+
+  /api/auth/logout:
+    post:
+      tags: [Authentication]
+      summary: Logout
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Logged out
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageResponse' }
+        '401': { description: Unauthorized }
+
+  /api/auth/check-email:
+    get:
+      tags: [Authentication]
+      summary: Check whether email exists
+      parameters:
+        - name: email
+          in: query
+          required: true
+          schema: { type: string, format: email }
+      responses:
+        '200':
+          description: Email existence
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  exists: { type: boolean }
+
+  /api/auth/forgot-password:
+    post:
+      tags: [Authentication]
+      summary: Request password reset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ForgotPasswordRequest' }
+      responses:
+        '200':
+          description: Neutral response
+
+  /api/auth/reset-password:
+    post:
+      tags: [Authentication]
+      summary: Reset password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResetPasswordRequest' }
+      responses:
+        '200':
+          description: Password reset
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageResponse' }
+
+  /api/auth/confirm-email:
+    get:
+      tags: [Authentication]
+      summary: Confirm email
+      parameters:
+        - { name: email, in: query, required: true, schema: { type: string, format: email } }
+        - { name: token, in: query, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Confirmation response }
+
+  /api/auth/resend-verification:
+    post:
+      tags: [Authentication]
+      summary: Resend verification email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ForgotPasswordRequest' }
+      responses:
+        '200': { description: Neutral response }
+
+  /api/auth/profile:
+    get:
+      tags: [Authentication]
+      summary: Get current user profile
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Profile
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Profile' }
+        '401': { description: Unauthorized }
+
+    put:
+      tags: [Authentication]
+      summary: Update current user profile
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProfileUpdateRequest' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessResponse' }
+
+  /api/auth/change-password:
+    post:
+      tags: [Authentication]
+      summary: Change password
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChangePasswordRequest' }
+      responses:
+        '200':
+          description: Changed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessResponse' }
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorArrayResponse' }
+
+  /api/products:
+    get:
+      tags: [Products]
+      summary: List products
+      parameters:
+        - { name: groupId, in: query, schema: { type: string } }
+        - { name: search, in: query, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, default: 0, maximum: 100 } }
+        - { name: deviceType, in: query, schema: { type: string, enum: [mobile, tablet, desktop] } }
+        - { name: X-Device-Type, in: header, schema: { type: string, enum: [mobile, tablet, desktop] } }
+      responses:
+        '200':
+          description: Paginated products
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaginatedProductList' }
+
+  /api/products/{itemCode}:
+    get:
+      tags: [Products]
+      summary: Get product by item code
+      parameters:
+        - { name: itemCode, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Product
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Product' }
+        '404':
+          description: Product not found
+
+  /api/categories:
+    get:
+      tags: [Products]
+      summary: List active categories
+      responses:
+        '200':
+          description: Categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Category' }
+
+  /api/product-stock:
+    get:
+      tags: [Stock]
+      summary: Get complete product stock map
+      responses:
+        '200':
+          description: Stock map
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StockResponse' }
+
+  /api/product-stock/{itemCode}:
+    get:
+      tags: [Stock]
+      summary: Get product stock
+      parameters:
+        - { name: itemCode, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Product stock
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProductStock' }
+
+    post:
+      tags: [Stock]
+      summary: Override product stock
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: itemCode, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [stock]
+              properties:
+                stock: { type: number, format: double }
+      responses:
+        '200': { description: Stock override saved }
+        '401': { description: Unauthorized }
+        '403': { description: Admin required }
+
+  /api/product-stock/decrement:
+    post:
+      tags: [Stock]
+      summary: Decrement stock
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StockDecrementRequest' }
+      responses:
+        '200':
+          description: Stock result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StockDecrementResponse' }
+        '403': { description: Admin required }
+
+  /api/stock:
+    get:
+      tags: [Stock]
+      summary: Detailed live ERP stock
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: pageNumber, in: query, schema: { type: integer, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, default: 50, minimum: 1, maximum: 200 } }
+        - { name: groupId, in: query, schema: { type: string } }
+        - { name: storeCode, in: query, schema: { type: string } }
+        - { name: search, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Detailed stock
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaginatedStockList' }
+        '403': { description: Admin required }
+
+  /api/orders:
+    get:
+      tags: [Orders]
+      summary: List orders
+      responses:
+        '200':
+          description: Orders, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Order' }
+
+    post:
+      tags: [Orders]
+      summary: Create order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateOrderRequest' }
+      responses:
+        '200':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  order: { $ref: '#/components/schemas/Order' }
+
+  /api/orders/update-status:
+    post:
+      tags: [Orders]
+      summary: Update order status
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateOrderStatusRequest' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  order: { $ref: '#/components/schemas/Order' }
+                  emailSent: { type: boolean }
+        '403': { description: Admin required }
+
+  /api/orders/bulk-update-status:
+    post:
+      tags: [Orders]
+      summary: Bulk update order status
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BulkUpdateOrderStatusRequest' }
+      responses:
+        '200':
+          description: Updated orders
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  updatedCount: { type: integer }
+                  orders:
+                    type: array
+                    items: { $ref: '#/components/schemas/Order' }
+        '403': { description: Admin required }
+
+  /api/orders/update-note:
+    post:
+      tags: [Orders]
+      summary: Update order internal note
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateOrderNoteRequest' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  order: { $ref: '#/components/schemas/Order' }
+        '403': { description: Admin required }
+
+  /api/orders/{orderId}:
+    delete:
+      tags: [Orders]
+      summary: Delete order
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: orderId, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessResponse' }
+        '403': { description: Admin required }
+
+  /api/custom-reviews:
+    get:
+      tags: [Reviews]
+      summary: List product reviews
+      parameters:
+        - { name: productId, in: query, schema: { type: string } }
+        - { name: all, in: query, schema: { type: boolean, default: false } }
+      responses:
+        '200':
+          description: Reviews
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Review' }
+
+    post:
+      tags: [Reviews]
+      summary: Create review
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateReviewRequest' }
+      responses:
+        '200':
+          description: Created and initially unapproved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  review: { $ref: '#/components/schemas/Review' }
+
+  /api/custom-reviews/{id}/approve:
+    post:
+      tags: [Reviews]
+      summary: Approve review
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Approved
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessResponse' }
+        '403': { description: Admin required }
+
+  /api/custom-reviews/{id}:
+    delete:
+      tags: [Reviews]
+      summary: Delete review
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessResponse' }
+        '403': { description: Admin required }
+
+  /api/cart:
+    get:
+      tags: [Cart]
+      summary: Get cart
+      parameters:
+        - { name: userId, in: query, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Cart items
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CartItem' }
+
+    post:
+      tags: [Cart]
+      summary: Upsert cart item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CartUpsertRequest' }
+      responses:
+        '200':
+          description: Upserted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessResponse' }
+
+    delete:
+      tags: [Cart]
+      summary: Clear cart
+      parameters:
+        - { name: userId, in: query, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Cart cleared
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  removed: { type: integer }
+
+  /api/cart/sync:
+    post:
+      tags: [Cart]
+      summary: Replace cart contents
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CartSyncRequest' }
+      responses:
+        '200':
+          description: Synchronized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessResponse' }
+
+  /api/cart/{itemId}:
+    delete:
+      tags: [Cart]
+      summary: Delete cart item
+      parameters:
+        - { name: itemId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessResponse' }
+
+  /api/wishlist:
+    get:
+      tags: [Wishlist]
+      summary: Get wishlist
+      parameters:
+        - { name: userId, in: query, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Wishlist
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/WishlistItem' }
+
+    post:
+      tags: [Wishlist]
+      summary: Add item to wishlist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WishlistRequest' }
+      responses:
+        '200':
+          description: Added
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessResponse' }
+
+    delete:
+      tags: [Wishlist]
+      summary: Remove item from wishlist
+      parameters:
+        - { name: userId, in: query, required: true, schema: { type: string } }
+        - { name: productId, in: query, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Removed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessResponse' }
+
+  /api/wishlist/sync:
+    post:
+      tags: [Wishlist]
+      summary: Replace wishlist contents
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WishlistSyncRequest' }
+      responses:
+        '200':
+          description: Synchronized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessResponse' }
+
+  /api/addresses:
+    get:
+      tags: [Addresses]
+      summary: List user addresses
+      parameters:
+        - { name: userId, in: query, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Addresses
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Address' }
+
+    post:
+      tags: [Addresses]
+      summary: Create or update address
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AddressInput' }
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Address' }
+
+  /api/addresses/sync:
+    post:
+      tags: [Addresses]
+      summary: Replace all user addresses
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AddressSyncRequest' }
+      responses:
+        '200':
+          description: Synchronized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessResponse' }
+
+  /api/addresses/{id}:
+    delete:
+      tags: [Addresses]
+      summary: Delete address
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: userId, in: query, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessResponse' }
+
+  /api/coupons:
+    get:
+      tags: [Coupons]
+      summary: List coupons
+      responses:
+        '200':
+          description: Coupons
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Coupon' }
+
+    post:
+      tags: [Coupons]
+      summary: Create or update coupon
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CouponInput' }
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Coupon' }
+        '403': { description: Admin required }
+
+  /api/coupons/validate:
+    post:
+      tags: [Coupons]
+      summary: Validate coupon
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ValidateCouponRequest' }
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidateCouponResponse' }
+
+  /api/coupons/{id}:
+    delete:
+      tags: [Coupons]
+      summary: Delete coupon
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Deleted }
+        '403': { description: Admin required }
+
+  /api/shipping-zones:
+    get:
+      tags: [Shipping & Payment]
+      summary: List active shipping zones
+      responses:
+        '200':
+          description: Active zones
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ShippingZone' }
+
+    post:
+      tags: [Shipping & Payment]
+      summary: Create or update shipping zone
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ShippingZoneInput' }
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ShippingZone' }
+        '403': { description: Admin required }
+
+  /api/shipping-zones/all:
+    get:
+      tags: [Shipping & Payment]
+      summary: List all shipping zones
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: All zones
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ShippingZone' }
+        '403': { description: Admin required }
+
+  /api/shipping-zones/{id}:
+    delete:
+      tags: [Shipping & Payment]
+      summary: Delete shipping zone
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Deleted }
+        '403': { description: Admin required }
+
+  /api/payment-methods:
+    get:
+      tags: [Shipping & Payment]
+      summary: List payment methods
+      responses:
+        '200':
+          description: Payment methods
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/PaymentMethod' }
+
+  /api/shipping-methods:
+    get:
+      tags: [Shipping & Payment]
+      summary: List active shipping methods
+      responses:
+        '200':
+          description: Shipping methods
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ShippingMethod' }
+
+  /api/admin/config:
+    get:
+      tags: [Store Settings]
+      summary: Get store configuration
+      responses:
+        '200':
+          description: Store configuration
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StoreConfig' }
+
+    put:
+      tags: [Store Settings]
+      summary: Update store configuration
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/StoreConfig'
+              description: Any subset of configuration fields may be supplied.
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StoreConfig' }
+        '403': { description: Admin required }
+
+  /api/admin/users:
+    get:
+      tags: [Users]
+      summary: List users
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: search, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: Users
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/UserAdmin' }
+        '403': { description: Admin required }
+
+  /api/admin/users/{userId}/block:
+    post:
+      tags: [Users]
+      summary: Block or unblock user
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: integer } }
+        - { name: blocked, in: query, required: true, schema: { type: boolean } }
+      responses:
+        '200':
+          description: User block state updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessResponse' }
+        '403': { description: Admin required }
+
+  /api/admin/users/{userId}/points:
+    post:
+      tags: [Users]
+      summary: Set loyalty points
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PointsRequest' }
+      responses:
+        '200':
+          description: Points updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessResponse' }
+        '403': { description: Admin required }
+
+  /api/abandoned-carts:
+    post:
+      tags: [Abandoned Carts]
+      summary: Create or update abandoned cart
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AbandonedCartRequest' }
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessResponse' }
+
+    get:
+      tags: [Abandoned Carts]
+      summary: List latest abandoned carts
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Latest 500 abandoned carts
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { type: object, additionalProperties: true }
+        '403': { description: Admin required }
+
+  /api/abandoned-carts/{id}:
+    delete:
+      tags: [Abandoned Carts]
+      summary: Delete abandoned cart
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Deleted }
+        '403': { description: Admin required }
+
+  /api/activity-logs:
+    get:
+      tags: [Activity Logs]
+      summary: List activity logs
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: take, in: query, schema: { type: integer, default: 200, maximum: 1000 } }
+      responses:
+        '200':
+          description: Activity logs
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ActivityLog' }
+        '403': { description: Admin required }
+
+    post:
+      tags: [Activity Logs]
+      summary: Create activity log
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ActivityLogRequest' }
+      responses:
+        '200':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ActivityLog' }
+        '403': { description: Admin required }
+
+    delete:
+      tags: [Activity Logs]
+      summary: Delete all activity logs
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  removed: { type: integer }
+        '403': { description: Admin required }
+
+  /api/analytics/search:
+    post:
+      tags: [Analytics]
+      summary: Record product search
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AnalyticsSearchRequest' }
+      responses:
+        '200':
+          description: Recorded
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+
+  /api/analytics/view/{itemCode}:
+    post:
+      tags: [Analytics]
+      summary: Record product view
+      parameters:
+        - { name: itemCode, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Recorded
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+
+  /api/analytics/report:
+    get:
+      tags: [Analytics]
+      summary: Get analytics report
+      responses:
+        '200':
+          description: Analytics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  searches:
+                    type: object
+                    additionalProperties: { type: integer }
+                  productViews:
+                    type: object
+                    additionalProperties: { type: integer }
+
+  /api/ai/smart-search:
+    post:
+      tags: [AI Smart Search]
+      summary: Smart local product search
+      description: Local AI-style recommendation logic; no external LLM is required.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SmartSearchRequest' }
+      responses:
+        '200':
+          description: Recommendations
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SmartSearchResponse' }
+
+  /api/email/welcome:
+    post:
+      tags: [Email]
+      summary: Send welcome email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmailRequest' }
+      responses:
+        '200':
+          description: Sent or no-op
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessResponse' }
+
+  /api/email/verify:
+    post:
+      tags: [Email]
+      summary: Send verification email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VerificationEmailRequest' }
+      responses:
+        '200':
+          description: Sent or no-op
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessResponse' }
+
+  /api/email/password-reset:
+    post:
+      tags: [Email]
+      summary: Send password reset email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PasswordResetEmailRequest' }
+      responses:
+        '200':
+          description: Sent or no-op
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessResponse' }
+
+  /api/email/login-notification:
+    post:
+      tags: [Email]
+      summary: Send login notification email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginNotificationRequest' }
+      responses:
+        '200':
+          description: Sent or no-op
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessResponse' }
+
+  /api/email/order-status:
+    post:
+      tags: [Email]
+      summary: Send order status email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OrderStatusEmailRequest' }
+      responses:
+        '200':
+          description: Sent or no-op
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessResponse' }
+
+  /api/email/generic:
+    post:
+      tags: [Email]
+      summary: Send generic email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GenericEmailRequest' }
+      responses:
+        '200':
+          description: Sent or no-op
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessResponse' }
+
+  /api/email/test:
+    get:
+      tags: [Email]
+      summary: Test email service
+      responses:
+        '200':
+          description: Email service test result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessResponse' }
