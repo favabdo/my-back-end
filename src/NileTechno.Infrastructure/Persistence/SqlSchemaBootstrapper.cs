@@ -864,6 +864,20 @@ public class SqlSchemaBootstrapper : ISqlSchemaBootstrapper
             );
             CREATE UNIQUE INDEX IX_AnalyticsProductViews_ProductId ON dbo.Ec_AnalyticsProductViews (ProductId);
             """);
+
+        await CreateTableIfMissingAsync(connection, "Ec_ErpPostings", cancellationToken, """
+            CREATE TABLE dbo.Ec_ErpPostings (
+                Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_ErpPostings PRIMARY KEY,
+                OrderId int NOT NULL,
+                ErpHeaderId bigint NULL,
+                Status nvarchar(20) NOT NULL CONSTRAINT DF_ErpPostings_Status DEFAULT ('Pending'),
+                Attempts int NOT NULL CONSTRAINT DF_ErpPostings_Attempts DEFAULT (0),
+                LastError nvarchar(max) NULL,
+                CreatedAt datetime2 NOT NULL CONSTRAINT DF_ErpPostings_CreatedAt DEFAULT (SYSUTCDATETIME()),
+                UpdatedAt datetime2 NULL
+            );
+            CREATE UNIQUE INDEX IX_ErpPostings_OrderId ON dbo.Ec_ErpPostings (OrderId);
+            """);
     }
 
     private async Task CreateTableIfMissingAsync(SqlConnection connection, string table, CancellationToken cancellationToken, string createSql)

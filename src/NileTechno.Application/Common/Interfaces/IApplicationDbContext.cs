@@ -29,6 +29,7 @@ public interface IApplicationDbContext
     DbSet<StockOverride> StockOverrides { get; }
     DbSet<AnalyticsSearch> AnalyticsSearches { get; }
     DbSet<AnalyticsProductView> AnalyticsProductViews { get; }
+    DbSet<ErpPosting> ErpPostings { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

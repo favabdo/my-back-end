@@ -14,12 +14,15 @@ public class OrdersCompatController : ApiControllerBase
     private readonly IApplicationDbContext _db;
     private readonly IEmailService _email;
     private readonly ICurrentUserService _currentUser;
+    private readonly IErpSalesPostingService _erpPoster;
 
-    public OrdersCompatController(IApplicationDbContext db, IEmailService email, ICurrentUserService currentUser)
+    public OrdersCompatController(IApplicationDbContext db, IEmailService email, ICurrentUserService currentUser,
+        IErpSalesPostingService erpPoster)
     {
         _db = db;
         _email = email;
         _currentUser = currentUser;
+        _erpPoster = erpPoster;
     }
 
     [HttpGet]
@@ -78,6 +81,10 @@ public class OrdersCompatController : ApiControllerBase
 
         _db.Orders.Add(order);
         await _db.SaveChangesAsync(ct);
+
+        // تسجّل أولًا في جداول Ec_ ثم تُفتح فاتورة ERP (TransType=3) — الخدمة لا ترمي استثناءات
+        await _erpPoster.PostOrderAsync(order.Id, ct);
+
         return Ok(new { success = true, order = Map(order) });
     }
 
@@ -92,6 +99,7 @@ public class OrdersCompatController : ApiControllerBase
         if (order is null)
             return NotFound(new { error = "الطلب غير موجود" });
 
+        var previousStatus = order.Status;
         order.Status = ParseStatus(body.NewStatus);
         if (!string.IsNullOrWhiteSpace(body.CancelReason))
             order.CancelReason = body.CancelReason;
@@ -105,6 +113,8 @@ public class OrdersCompatController : ApiControllerBase
         });
 
         await _db.SaveChangesAsync(ct);
+
+        await SyncErpPostingAsync(order.Id, previousStatus, order.Status, ct);
 
         if (!string.IsNullOrWhiteSpace(order.CustomerEmail))
             await _email.SendOrderStatusEmailAsync(order.CustomerEmail, order.CustomerName, order.OrderNumber, body.NewStatus, ct);
@@ -120,13 +130,16 @@ public class OrdersCompatController : ApiControllerBase
             return BadRequest(new { error = "orderIds (مصفوفة) و newStatus مطلوبان" });
 
         var updated = new List<object>();
+        var statusChanges = new List<(int OrderId, OrderStatus Previous, OrderStatus New)>();
         foreach (var id in body.OrderIds)
         {
             var order = await FindOrderAsync(id, ct);
             if (order is null)
                 continue;
 
+            var previousStatus = order.Status;
             order.Status = ParseStatus(body.NewStatus);
+            statusChanges.Add((order.Id, previousStatus, order.Status));
             if (!string.IsNullOrWhiteSpace(body.CancelReason))
                 order.CancelReason = body.CancelReason;
 
@@ -145,6 +158,10 @@ public class OrdersCompatController : ApiControllerBase
         }
 
         await _db.SaveChangesAsync(ct);
+
+        foreach (var change in statusChanges)
+            await SyncErpPostingAsync(change.OrderId, change.Previous, change.New, ct);
+
         return Ok(new { success = true, updatedCount = updated.Count, orders = updated });
     }
 
@@ -180,9 +197,21 @@ public class OrdersCompatController : ApiControllerBase
         if (order is null)
             return NotFound(new { error = "الطلب غير موجود" });
 
+        await _erpPoster.ReverseOrderAsync(order.Id, ct);
         _db.Orders.Remove(order);
         await _db.SaveChangesAsync(ct);
         return Ok(new { success = true });
+    }
+
+    private async Task SyncErpPostingAsync(int orderId, OrderStatus previous, OrderStatus current, CancellationToken ct)
+    {
+        var isCancelled = current is OrderStatus.Canceled or OrderStatus.Refunded;
+        var wasCancelled = previous is OrderStatus.Canceled or OrderStatus.Refunded;
+
+        if (isCancelled && !wasCancelled)
+            await _erpPoster.ReverseOrderAsync(orderId, ct);
+        else if (!isCancelled && wasCancelled)
+            await _erpPoster.RestoreOrderAsync(orderId, ct);
     }
 
     private async Task<Order?> FindOrderAsync(string orderId, CancellationToken ct) =>

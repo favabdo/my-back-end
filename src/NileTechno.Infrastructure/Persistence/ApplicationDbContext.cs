@@ -35,6 +35,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
     public DbSet<StockOverride> StockOverrides => Set<StockOverride>();
     public DbSet<AnalyticsSearch> AnalyticsSearches => Set<AnalyticsSearch>();
     public DbSet<AnalyticsProductView> AnalyticsProductViews => Set<AnalyticsProductView>();
+    public DbSet<ErpPosting> ErpPostings => Set<ErpPosting>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -120,6 +121,12 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
         {
             e.ToTable("Ec_AnalyticsProductViews");
             e.HasIndex(s => s.ProductId).IsUnique();
+        });
+
+        builder.Entity<ErpPosting>(e =>
+        {
+            e.ToTable("Ec_ErpPostings");
+            e.HasIndex(p => p.OrderId).IsUnique();
         });
 
         builder.Entity<Coupon>(e =>
