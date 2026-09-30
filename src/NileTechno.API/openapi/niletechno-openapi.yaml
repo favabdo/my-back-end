@@ -87,6 +87,7 @@ components:
 
     AuthResponse:
       type: object
+      description: باقة آمنة موحّدة لكل مخارج الكريدشنز (login/register/google/refresh) — بدون refreshToken أو بيانات شخصية إضافية. الجلسة تنتهي بعد 60 دقيقة ويسري إعادة الدخول.
       properties:
         userId: { type: integer }
         email: { type: string, format: email }
@@ -94,23 +95,6 @@ components:
         roles:
           type: array
           items: { type: string }
-        accessToken: { type: string }
-        accessTokenExpiresAtUtc: { type: string, format: date-time }
-        refreshToken: { type: string }
-        loyaltyPoints: { type: integer }
-        phone: { type: string, nullable: true }
-        createdAt: { type: string, format: date-time }
-        authProvider:
-          type: string
-          enum: [Password, Google]
-
-    RegisterAuthResponse:
-      type: object
-      description: بيانات تسجيل الدخول الصادرة فور إنشاء الحساب (تسجيل دخول تلقائي) — الحد الأدنى فقط بدون بيانات تجميلية
-      properties:
-        userId: { type: integer }
-        email: { type: string, format: email }
-        fullName: { type: string }
         accessToken: { type: string }
 
     GoogleAuthRequest:
@@ -765,7 +749,7 @@ paths:
     post:
       tags: [Authentication]
       summary: Register a new account
-      description: إنشاء حساب جديد وإصدار بيانات تسجيل دخول فورًا (تسجيل تلقائي بدون خطوة login إضافية).
+      description: إنشاء حساب جديد وإصدار نفس باقة اللوجين الآمنة فورًا (تسجيل دخول تلقائي بدون خطوة login).
       requestBody:
         required: true
         content:
@@ -773,12 +757,12 @@ paths:
             schema: { $ref: '#/components/schemas/RegisterRequest' }
       responses:
         '200':
-          description: Registered + auto-login credentials (or fallback message)
+          description: Registered + auto-login credentials (same safe AuthResponse as login, or fallback message)
           content:
             application/json:
               schema:
                 oneOf:
-                  - $ref: '#/components/schemas/RegisterAuthResponse'
+                  - $ref: '#/components/schemas/AuthResponse'
                   - type: object
                     properties:
                       message: { type: string }

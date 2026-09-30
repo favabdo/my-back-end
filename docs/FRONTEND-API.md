@@ -21,10 +21,10 @@ Base URL (local dev): `http://localhost:5080`
 ## 2) Auth (Ec_LoginAccounts)
 | Method | Path | Auth | Body / Params | الرد |
 |---|---|---|---|---|
-| POST | `/api/auth/register` | — | `{email, password, fullName}` | **`RegisterAuthResponse` (تحت — تسجيل دخول تلقائي)** أو fallback `{message,userId,emailConfirmed:true}`؛ و400 `{errors:[...]}` لو موجود |
+| POST | `/api/auth/register` | — | `{email, password, fullName}` | **`AuthResponse` (تحت — تسجيل دخول تلقائي)** أو fallback `{message,userId,emailConfirmed:true}`؛ و400 `{errors:[...]}` لو موجود |
 | POST | `/api/auth/login` | — | `{email, password}` | AuthResponse (تحت) |
 | POST | `/api/auth/google` | — | `{accessToken \| idToken}` (Google GSI) | AuthResponse أو 401 |
-| POST | `/api/auth/refresh-token` | — | `{refreshToken}` | AuthResponse جديد (الـ refresh صلاحيته 30 يوم وbitدوّر كل مرة) |
+| POST | `/api/auth/refresh-token` | — | `{refreshToken}` | `AuthResponse` (الحقول زي اللوجين — **بدون refreshToken جديد**). للجلسات القديمة فقط؛ ما دمت ما رجعناش refreshToken من login/register، ماعادش في تجديد بعد 60 دقيقة، والمستخدم يعيد اللوجين |
 | POST | `/api/auth/logout` | Bearer | — | `{message:"تم تسجيل الخروج بنجاح."}` ويمسح الـ refresh token |
 | GET | `/api/auth/check-email?email=` | — | — | `{exists: bool}` |
 | POST | `/api/auth/forgot-password` | — | `{email}` | 200 دايمًا برسالة محايدة + سيرسل إيميل إعادة الضبط |
@@ -35,17 +35,13 @@ Base URL (local dev): `http://localhost:5080`
 | PUT | `/api/auth/profile` | Bearer | `{fullName?, phone?}` | `{success:true}` |
 | POST | `/api/auth/change-password` | Bearer | `{currentPassword, newPassword}` (≥6) | `{success:true}` أو 400 `{errors}` |
 
-**AuthResponse (flat):**
+**AuthResponse (آمنة وموحّدة — login/register/google/refresh كلها بترد نفس الشكل):**
 ```json
 { "userId": 1, "email": "...", "fullName": "...", "roles": ["User"],
-  "accessToken": "jwt", "accessTokenExpiresAtUtc": "...", "refreshToken": "...",
-  "loyaltyPoints": 100, "phone": null, "createdAt": "...", "authProvider": "Password|Google" }
+  "accessToken": "jwt" }
 ```
-**RegisterAuthResponse (الحد الأدنى فقط — بدون refreshToken/roles/بيانات تجميلية):**
-```json
-{ "userId": 10, "email": "...", "fullName": "...", "accessToken": "jwt" }
-```
-> استخدمه لتسجيل دخول تلقائي: `setTokens(accessToken)` ثم خزّن `userId/email/fullName`. صلاحية التوكن 60 دقيقة وبعدها يسري الـ login العادي (الرسّجستر ما بيرجعش refreshToken).
+> ⚠️ من 2026-09-30: ما بنرجّعش `refreshToken` ولا `loyaltyPoints/phone/createdAt/authProvider/expiresAt` في أي رد. الجلسة 60 دقيقة وبعدها المستخدم يعيد اللوجين (endpoint الـ `/refresh-token` لسه شغال للجلسات القديمة اللي عندها توكن قديم ومحفوظ عندها، وبردًا ما بيرجعش refreshToken جديد).
+> الـ `roles` موجودة لأن الفرونت بيفتح بيها تبويبات الأدمن — وهي بيانات حسابك نفسه (موجودة أصلًا جوه التوكن).
 > حسابات Google لا تسجّل بكلمة مرور؛ كلمة مرورها تتغيّر من `/api/auth/change-password` فقط لحسابات Password.
 
 ## 3) المنتجات والتصنيفات (المصدر: EC_Products، filter Status=1)

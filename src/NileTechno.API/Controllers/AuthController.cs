@@ -9,12 +9,24 @@ using NileTechno.Application.Features.Auth.Commands.RefreshToken;
 using NileTechno.Application.Features.Auth.Commands.Register;
 using NileTechno.Application.Features.Auth.Commands.ResendVerificationEmail;
 using NileTechno.Application.Features.Auth.Commands.ResetPassword;
+using NileTechno.Application.Features.Auth.DTOs;
 using NileTechno.Application.Features.Auth.Queries.CheckEmailExists;
 
 namespace NileTechno.API.Controllers;
 
 public class AuthController : ApiControllerBase
 {
+    // باقة آمنة موحّدة: بدون refreshToken أو أي بيانات شخصية/تجميلية
+    // (roles محتاجها الفرونت لفتح تبويبات الأدمن، وهي بيانات حسابك نفسه وموجودة أصلًا داخل التوكن)
+    private static object AuthPayload(AuthResponseDto d) => new
+    {
+        userId = d.UserId,
+        email = d.Email,
+        fullName = d.FullName,
+        roles = d.Roles,
+        accessToken = d.AccessToken
+    };
+
     [HttpPost("register")]
     public async Task<IActionResult> Register(RegisterCommand command)
     {
@@ -24,16 +36,7 @@ public class AuthController : ApiControllerBase
         // إصدار كريدشنز فورًا (نفس منطق اللوجين) لتسجيل الدخول التلقائي — أقل قدر لازم فقط
         var login = await Mediator.Send(new LoginCommand(command.Email, command.Password));
         if (login.Succeeded && login.Data is not null)
-        {
-            var d = login.Data;
-            return Ok(new
-            {
-                userId = d.UserId,
-                email = d.Email,
-                fullName = d.FullName,
-                accessToken = d.AccessToken
-            });
-        }
+            return Ok(AuthPayload(login.Data));
 
         return Ok(new { message = "تم إنشاء الحساب بنجاح. تقدر تسجّل الدخول دلوقتي.", userId = result.Data, emailConfirmed = true });
     }
@@ -43,7 +46,7 @@ public class AuthController : ApiControllerBase
     {
         var result = await Mediator.Send(command);
         if (!result.Succeeded) return Unauthorized(new { errors = result.Errors });
-        return Ok(result.Data);
+        return Ok(AuthPayload(result.Data!));
     }
 
     [HttpPost("login")]
@@ -51,7 +54,7 @@ public class AuthController : ApiControllerBase
     {
         var result = await Mediator.Send(command);
         if (!result.Succeeded) return Unauthorized(new { errors = result.Errors });
-        return Ok(result.Data);
+        return Ok(AuthPayload(result.Data!));
     }
 
     [HttpPost("refresh-token")]
@@ -59,7 +62,7 @@ public class AuthController : ApiControllerBase
     {
         var result = await Mediator.Send(command);
         if (!result.Succeeded) return Unauthorized(new { errors = result.Errors });
-        return Ok(result.Data);
+        return Ok(AuthPayload(result.Data!));
     }
 
     [Authorize]
