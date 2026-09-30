@@ -87,7 +87,7 @@ components:
 
     AuthResponse:
       type: object
-      description: باقة آمنة موحّدة لكل مخارج الكريدشنز (login/register/google/refresh) — بدون refreshToken أو بيانات شخصية إضافية. الجلسة تنتهي بعد 60 دقيقة ويسري إعادة الدخول.
+      description: رد الكريدشنز الكامل — متطابق في login و register و google و refresh-token (الريجستر يرجع نفس الرد ده فورًا للتسجيل التلقائي)
       properties:
         userId: { type: integer }
         email: { type: string, format: email }
@@ -96,6 +96,14 @@ components:
           type: array
           items: { type: string }
         accessToken: { type: string }
+        accessTokenExpiresAtUtc: { type: string, format: date-time }
+        refreshToken: { type: string }
+        loyaltyPoints: { type: integer }
+        phone: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        authProvider:
+          type: string
+          enum: [Password, Google]
 
     GoogleAuthRequest:
       type: object
@@ -749,7 +757,7 @@ paths:
     post:
       tags: [Authentication]
       summary: Register a new account
-      description: إنشاء حساب جديد وإصدار نفس باقة اللوجين الآمنة فورًا (تسجيل دخول تلقائي بدون خطوة login).
+      description: إنشاء حساب جديد وإرجاع نفس رد اللوجين بالكامل فورًا (تسجيل دخول تلقائي بدون خطوة login).
       requestBody:
         required: true
         content:
@@ -757,7 +765,7 @@ paths:
             schema: { $ref: '#/components/schemas/RegisterRequest' }
       responses:
         '200':
-          description: Registered + auto-login credentials (same safe AuthResponse as login, or fallback message)
+          description: Registered + full auto-login credentials (same shape as login, or fallback message)
           content:
             application/json:
               schema:
