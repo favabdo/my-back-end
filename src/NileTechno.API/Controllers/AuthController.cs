@@ -20,6 +20,21 @@ public class AuthController : ApiControllerBase
     {
         var result = await Mediator.Send(command);
         if (!result.Succeeded) return BadRequest(new { errors = result.Errors });
+
+        // إصدار كريدشنز فورًا (نفس منطق اللوجين) لتسجيل الدخول التلقائي — أقل قدر لازم فقط
+        var login = await Mediator.Send(new LoginCommand(command.Email, command.Password));
+        if (login.Succeeded && login.Data is not null)
+        {
+            var d = login.Data;
+            return Ok(new
+            {
+                userId = d.UserId,
+                email = d.Email,
+                fullName = d.FullName,
+                accessToken = d.AccessToken
+            });
+        }
+
         return Ok(new { message = "تم إنشاء الحساب بنجاح. تقدر تسجّل الدخول دلوقتي.", userId = result.Data, emailConfirmed = true });
     }
 

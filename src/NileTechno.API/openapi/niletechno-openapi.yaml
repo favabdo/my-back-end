@@ -104,6 +104,15 @@ components:
           type: string
           enum: [Password, Google]
 
+    RegisterAuthResponse:
+      type: object
+      description: بيانات تسجيل الدخول الصادرة فور إنشاء الحساب (تسجيل دخول تلقائي) — الحد الأدنى فقط بدون بيانات تجميلية
+      properties:
+        userId: { type: integer }
+        email: { type: string, format: email }
+        fullName: { type: string }
+        accessToken: { type: string }
+
     GoogleAuthRequest:
       type: object
       properties:
@@ -756,6 +765,7 @@ paths:
     post:
       tags: [Authentication]
       summary: Register a new account
+      description: إنشاء حساب جديد وإصدار بيانات تسجيل دخول فورًا (تسجيل تلقائي بدون خطوة login إضافية).
       requestBody:
         required: true
         content:
@@ -763,15 +773,17 @@ paths:
             schema: { $ref: '#/components/schemas/RegisterRequest' }
       responses:
         '200':
-          description: Registered
+          description: Registered + auto-login credentials (or fallback message)
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  message: { type: string }
-                  userId: { type: integer }
-                  emailConfirmed: { type: boolean }
+                oneOf:
+                  - $ref: '#/components/schemas/RegisterAuthResponse'
+                  - type: object
+                    properties:
+                      message: { type: string }
+                      userId: { type: integer }
+                      emailConfirmed: { type: boolean }
         '400':
           description: Validation error
           content:
@@ -1107,6 +1119,7 @@ paths:
     post:
       tags: [Orders]
       summary: Create order
+      description: حفظ الطلب في Ec_Orders ثم فتح فاتورة ERP تلقائيًا (wh_TransHeader TransType=3 + wh_TransDetails) فيُخصم المخزون من ERP ويظهر في المتجر خلال دقيقتين. فشل الفاتورة لا يُفشل الطلب (إعادة محاولة تلقائية في الخلفية).
       requestBody:
         required: true
         content:
@@ -1127,6 +1140,7 @@ paths:
     post:
       tags: [Orders]
       summary: Update order status
+      description: عند التحول إلى CANCELED/REFUNDED تُعقَّد فاتورة الـ ERP (Status=0) فيرجع المخزون تلقائيًا، والعودة لحالة نشطة تُلغي التعقيد.
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -1150,6 +1164,7 @@ paths:
     post:
       tags: [Orders]
       summary: Bulk update order status
+      description: نفس سلوك تعديل الحالة الفردي — الإلغاء يعقّد فاتورة ERP لكل طلب والعودة تنشرها.
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true
@@ -1197,6 +1212,7 @@ paths:
     delete:
       tags: [Orders]
       summary: Delete order
+      description: يعقّد فاتورة الـ ERP المرتبطة (إن وُجدت) قبل حذف الطلب من جداول المتجر.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: orderId, in: path, required: true, schema: { type: integer } }
@@ -1496,6 +1512,20 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Coupon' }
         '403': { description: Admin required }
+
+  /api/coupons/active:
+    get:
+      tags: [Coupons]
+      summary: List active coupons
+      description: الكوبونات النشطة فقط (IsActive وبدون انتهاء أو غير منتهي) — عامة بدون توكن.
+      responses:
+        '200':
+          description: Active coupons
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Coupon' }
 
   /api/coupons/validate:
     post:

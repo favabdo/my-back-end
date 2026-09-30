@@ -21,7 +21,7 @@ Base URL (local dev): `http://localhost:5080`
 ## 2) Auth (Ec_LoginAccounts)
 | Method | Path | Auth | Body / Params | الرد |
 |---|---|---|---|---|
-| POST | `/api/auth/register` | — | `{email, password, fullName}` | `{message, userId, emailConfirmed:true}` و400 `{errors:[...]}` لو موجود |
+| POST | `/api/auth/register` | — | `{email, password, fullName}` | **`RegisterAuthResponse` (تحت — تسجيل دخول تلقائي)** أو fallback `{message,userId,emailConfirmed:true}`؛ و400 `{errors:[...]}` لو موجود |
 | POST | `/api/auth/login` | — | `{email, password}` | AuthResponse (تحت) |
 | POST | `/api/auth/google` | — | `{accessToken \| idToken}` (Google GSI) | AuthResponse أو 401 |
 | POST | `/api/auth/refresh-token` | — | `{refreshToken}` | AuthResponse جديد (الـ refresh صلاحيته 30 يوم وbitدوّر كل مرة) |
@@ -41,6 +41,11 @@ Base URL (local dev): `http://localhost:5080`
   "accessToken": "jwt", "accessTokenExpiresAtUtc": "...", "refreshToken": "...",
   "loyaltyPoints": 100, "phone": null, "createdAt": "...", "authProvider": "Password|Google" }
 ```
+**RegisterAuthResponse (الحد الأدنى فقط — بدون refreshToken/roles/بيانات تجميلية):**
+```json
+{ "userId": 10, "email": "...", "fullName": "...", "accessToken": "jwt" }
+```
+> استخدمه لتسجيل دخول تلقائي: `setTokens(accessToken)` ثم خزّن `userId/email/fullName`. صلاحية التوكن 60 دقيقة وبعدها يسري الـ login العادي (الرسّجستر ما بيرجعش refreshToken).
 > حسابات Google لا تسجّل بكلمة مرور؛ كلمة مرورها تتغيّر من `/api/auth/change-password` فقط لحسابات Password.
 
 ## 3) المنتجات والتصنيفات (المصدر: EC_Products، filter Status=1)
@@ -82,6 +87,8 @@ Base URL (local dev): `http://localhost:5080`
 | POST | `/api/orders/bulk-update-status` | **Admin** | `{orderIds:[...], newStatus, cancelReason?}` | `{success, updatedCount, orders[]}` |
 | POST | `/api/orders/update-note` | **Admin** | `{orderId, note}` | `{success, order}` + سطر history |
 | DELETE | `/api/orders/{orderId}` | **Admin** | — | `{success}` (يحذف الـ items والـ history بالـ cascade) |
+
+> **ERP side-effect (من 2026-09-29، بدون تغيير في أي عقد):** الإنشاء يفتح فاتورة ERP تلقائيًا (TransType=3) فيُخصم المخزون ويظهر في المتجر خلال ~دقيقتين؛ CANCELED/REFUNDED (فردي أو جماعي) والحذف يعقّدون الفاتورة فيرجع المخزون؛ التنشيط من حالة ملغاة ينشرها مجددًا. فشل الفاتورة لا يُفشل الطلب أبدًا (outbox + retry).
 
 **payload إنشاء أوردر (كل الحقول اختيارية عدا customerName/phone/items/total):**
 ```json
