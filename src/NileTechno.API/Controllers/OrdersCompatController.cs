@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using NileTechno.Application.Common.Interfaces;
 using NileTechno.Domain.Entities;
 using NileTechno.Domain.Enums;
+using NileTechno.Infrastructure.Services;
 
 namespace NileTechno.API.Controllers;
 
@@ -15,14 +16,16 @@ public class OrdersCompatController : ApiControllerBase
     private readonly IEmailService _email;
     private readonly ICurrentUserService _currentUser;
     private readonly IErpSalesPostingService _erpPoster;
+    private readonly EcProductCatalogQuery _catalog;
 
     public OrdersCompatController(IApplicationDbContext db, IEmailService email, ICurrentUserService currentUser,
-        IErpSalesPostingService erpPoster)
+        IErpSalesPostingService erpPoster, EcProductCatalogQuery catalog)
     {
         _db = db;
         _email = email;
         _currentUser = currentUser;
         _erpPoster = erpPoster;
+        _catalog = catalog;
     }
 
     [HttpGet]
@@ -58,6 +61,13 @@ public class OrdersCompatController : ApiControllerBase
                 if (item.Quantity <= 0)
                     errors.Add($"المنتج رقم {idx} في الأوردر كميته غير صحيحة");
             }
+        if (errors.Count > 0)
+            return BadRequest(new { success = false, errors });
+
+        var wantedCodes = body.Items!.Select(i => i.ProductId!.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var activeProducts = await _catalog.GetProductsByCodesAsync(wantedCodes, ct);
+        foreach (var code in wantedCodes.Where(c => !activeProducts.ContainsKey(c)))
+            errors.Add($"المنتج '{code}' غير موجود أو غير متاح حاليًا");
         if (errors.Count > 0)
             return BadRequest(new { success = false, errors });
 

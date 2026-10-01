@@ -518,12 +518,13 @@ public class SqlSchemaBootstrapper : ISqlSchemaBootstrapper
 
         // EC_Orders is defined below as Ec_Orders in storefront order shape
 
-        // ====== Ec_Cart ======
+        // ====== Ec_Cart — storage الوحيد للسلة (أضاف المالك له UserId 2026-10-01) ======
         await RenameTableIfNeededAsync(connection, "Cart", "Ec_Cart", cancellationToken);
 
         await CreateTableIfMissingAsync(connection, "Ec_Cart", cancellationToken, """
             CREATE TABLE dbo.Ec_Cart (
                 Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_Ec_Cart PRIMARY KEY,
+                UserId nvarchar(64) NOT NULL CONSTRAINT DF_Ec_Cart_UserId DEFAULT (''),
                 ProductID int NOT NULL,
                 ProductServerId int NOT NULL,
                 OrderID int NULL,
@@ -538,28 +539,18 @@ public class SqlSchemaBootstrapper : ISqlSchemaBootstrapper
             );
             CREATE INDEX IX_Ec_Cart_ProductID_OrderID ON dbo.Ec_Cart (ProductID, OrderID);
             CREATE INDEX IX_Ec_Cart_OrderID ON dbo.Ec_Cart (OrderID);
+            CREATE INDEX IX_Ec_Cart_UserId_ProductID ON dbo.Ec_Cart (UserId, ProductID);
             """);
 
-        // ====== EC_Rating ======
-        await CreateTableIfMissingAsync(connection, "EC_Rating", cancellationToken, """
-            CREATE TABLE dbo.EC_Rating (
-                Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_EC_Rating PRIMARY KEY,
-                ProductID int NOT NULL,
-                Rating int NOT NULL CONSTRAINT DF_EC_Rating_Rating DEFAULT (0),
-                Comment nvarchar(max) NULL,
-                Type nvarchar(50) NULL,
-                Status int NOT NULL CONSTRAINT DF_EC_Rating_Status DEFAULT (0),
-                CreatedAt datetime2 NOT NULL CONSTRAINT DF_EC_Rating_CreatedAt DEFAULT (SYSUTCDATETIME()),
-                UpdatedAt datetime2 NULL,
-                CONSTRAINT FK_EC_Rating_Products FOREIGN KEY (ProductID) REFERENCES dbo.EC_Products(Id) ON DELETE CASCADE
-            );
-            CREATE INDEX IX_EC_Rating_ProductID ON dbo.EC_Rating (ProductID);
-            """);
+        await EnsureColumnAsync(connection, "Ec_Cart", "UserId", "nvarchar(64) NOT NULL CONSTRAINT DF_Ec_Cart_UserId DEFAULT ('')", cancellationToken);
+        await ExecuteAsync(connection, """
+            IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Ec_Cart_UserId_ProductID' AND object_id = OBJECT_ID('dbo.Ec_Cart'))
+                CREATE INDEX IX_Ec_Cart_UserId_ProductID ON dbo.Ec_Cart (UserId, ProductID);
+            """, cancellationToken);
 
         await RenameTableIfNeededAsync(connection, "Coupons", "Ec_Coupons", cancellationToken);
         await RenameTableIfNeededAsync(connection, "ShippingZones", "Ec_ShippingZones", cancellationToken);
         await RenameTableIfNeededAsync(connection, "Reviews", "Ec_Reviews", cancellationToken);
-        await RenameTableIfNeededAsync(connection, "CartItems", "Ec_CartItems", cancellationToken);
         await RenameTableIfNeededAsync(connection, "WishlistItems", "Ec_WishlistItems", cancellationToken);
         await RenameTableIfNeededAsync(connection, "AbandonedCarts", "Ec_AbandonedCarts", cancellationToken);
         await RenameTableIfNeededAsync(connection, "AbandonedCartItems", "Ec_AbandonedCartItems", cancellationToken);
@@ -643,42 +634,8 @@ public class SqlSchemaBootstrapper : ISqlSchemaBootstrapper
             """);
 
         // ====== Catalog ======
-        await CreateTableIfMissingAsync(connection, "Ec_Categories", cancellationToken, """
-            CREATE TABLE dbo.Ec_Categories (
-                Id uniqueidentifier NOT NULL CONSTRAINT PK_Categories PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
-                Name nvarchar(200) NOT NULL,
-                NameEn nvarchar(200) NULL,
-                IconUrl nvarchar(500) NULL,
-                CreatedAt datetime2 NOT NULL CONSTRAINT DF_Categories_CreatedAt DEFAULT (SYSUTCDATETIME()),
-                UpdatedAt datetime2 NULL
-            );
-            """);
-
-        await CreateTableIfMissingAsync(connection, "Ec_Products", cancellationToken, """
-            CREATE TABLE dbo.Ec_Products (
-                Id uniqueidentifier NOT NULL CONSTRAINT PK_Products PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
-                Name nvarchar(200) NOT NULL,
-                NameEn nvarchar(200) NULL,
-                Description nvarchar(max) NULL,
-                DescriptionEn nvarchar(max) NULL,
-                Price decimal(18,2) NOT NULL CONSTRAINT DF_Products_Price DEFAULT (0),
-                DiscountPrice decimal(18,2) NULL,
-                Stock int NOT NULL CONSTRAINT DF_Products_Stock DEFAULT (0),
-                Featured bit NOT NULL CONSTRAINT DF_Products_Featured DEFAULT (0),
-                IsNew bit NOT NULL CONSTRAINT DF_Products_IsNew DEFAULT (0),
-                ImageUrl nvarchar(500) NULL,
-                GalleryUrls nvarchar(max) NULL,
-                Rating float NOT NULL CONSTRAINT DF_Products_Rating DEFAULT (0),
-                ReviewsCount int NOT NULL CONSTRAINT DF_Products_ReviewsCount DEFAULT (0),
-                Colors nvarchar(max) NULL,
-                Sizes nvarchar(max) NULL,
-                CategoryId uniqueidentifier NOT NULL,
-                CreatedAt datetime2 NOT NULL CONSTRAINT DF_Products_CreatedAt DEFAULT (SYSUTCDATETIME()),
-                UpdatedAt datetime2 NULL,
-                CONSTRAINT FK_Products_Categories FOREIGN KEY (CategoryId) REFERENCES dbo.Ec_Categories(Id)
-            );
-            CREATE INDEX IX_Products_CategoryId ON dbo.Ec_Products (CategoryId);
-            """);
+        // EC_Groups / EC_Products (الشكل الصحيح) تمّ إنشاؤهما أعلى؛ الأقسام تُشتق من EC_Groups مباشرة.
+        // Ec_Categories وEC_Rating وEc_CartItems: جداول متقاعدة يهبطها DropObsoleteTablesIfEmptyAsync أدناه.
 
         // ====== Marketing & fulfilment ======
         await CreateTableIfMissingAsync(connection, "Ec_Coupons", cancellationToken, """
@@ -728,20 +685,7 @@ public class SqlSchemaBootstrapper : ISqlSchemaBootstrapper
             """);
 
         // ====== Customer baskets ======
-        await DropEmptyTableIfShapeChangedAsync(connection, "Ec_CartItems", "UserId", "uniqueidentifier", cancellationToken);
-        await CreateTableIfMissingAsync(connection, "Ec_CartItems", cancellationToken, """
-            CREATE TABLE dbo.Ec_CartItems (
-                Id uniqueidentifier NOT NULL CONSTRAINT PK_CartItems PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
-                UserId nvarchar(64) NOT NULL,
-                ProductId nvarchar(50) NOT NULL,
-                Quantity int NOT NULL CONSTRAINT DF_CartItems_Quantity DEFAULT (1),
-                SelectedColor nvarchar(50) NULL,
-                SelectedSize nvarchar(50) NULL,
-                CreatedAt datetime2 NOT NULL CONSTRAINT DF_CartItems_CreatedAt DEFAULT (SYSUTCDATETIME()),
-                UpdatedAt datetime2 NULL
-            );
-            CREATE INDEX IX_CartItems_UserId_ProductId ON dbo.Ec_CartItems (UserId, ProductId);
-            """);
+        // السلة صارت على Ec_Cart (أعلى)؛ Ec_CartItems متقاعد ويُهبط إن كان فاضي.
 
         await DropEmptyTableIfShapeChangedAsync(connection, "Ec_WishlistItems", "UserId", "uniqueidentifier", cancellationToken);
         await CreateTableIfMissingAsync(connection, "Ec_WishlistItems", cancellationToken, """
@@ -878,6 +822,43 @@ public class SqlSchemaBootstrapper : ISqlSchemaBootstrapper
             );
             CREATE UNIQUE INDEX IX_ErpPostings_OrderId ON dbo.Ec_ErpPostings (OrderId);
             """);
+
+        // ====== جداول متقاعدة بقرار المالك (2026-10-01) — تُهبط فقط إن كانت فارغة ومافيش مرجع لها ======
+        await DropUnusedTableIfEmptyAsync(connection, "Ec_CartItems", cancellationToken);
+        await DropUnusedTableIfEmptyAsync(connection, "EC_Rating", cancellationToken);
+        await DropUnusedTableIfEmptyAsync(connection, "Ec_Categories", cancellationToken);
+    }
+
+    private async Task DropUnusedTableIfEmptyAsync(SqlConnection connection, string table, CancellationToken cancellationToken)
+    {
+        if (!await TableExistsAsync(connection, table, cancellationToken))
+            return;
+
+        await using (var count = connection.CreateCommand())
+        {
+            count.CommandText = $"SELECT COUNT(*) FROM dbo.[{table}];";
+            var rows = Convert.ToInt64(await count.ExecuteScalarAsync(cancellationToken) ?? 0L);
+            if (rows > 0)
+            {
+                _logger.LogWarning("Retired table dbo.{Table} still has {Rows} rows — keeping it untouched.", table, rows);
+                return;
+            }
+        }
+
+        await using (var refs = connection.CreateCommand())
+        {
+            refs.CommandText = "SELECT COUNT(*) FROM sys.foreign_keys WHERE referenced_object_id = OBJECT_ID(@t);";
+            refs.Parameters.AddWithValue("@t", $"dbo.{table}");
+            var incoming = Convert.ToInt64(await refs.ExecuteScalarAsync(cancellationToken) ?? 0L);
+            if (incoming > 0)
+            {
+                _logger.LogWarning("Retired table dbo.{Table} is referenced by {Count} FK(s) — keeping it.", table, incoming);
+                return;
+            }
+        }
+
+        _logger.LogInformation("Dropping retired empty table dbo.{Table}", table);
+        await ExecuteAsync(connection, $"DROP TABLE dbo.[{table}];", cancellationToken);
     }
 
     private async Task CreateTableIfMissingAsync(SqlConnection connection, string table, CancellationToken cancellationToken, string createSql)

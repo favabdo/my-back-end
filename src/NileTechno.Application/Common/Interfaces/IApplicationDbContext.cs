@@ -16,7 +16,6 @@ public interface IApplicationDbContext
     DbSet<Coupon> Coupons { get; }
     DbSet<ShippingZone> ShippingZones { get; }
 
-    DbSet<CartItem> CartItems { get; }
     DbSet<WishlistItem> WishlistItems { get; }
 
     DbSet<AbandonedCart> AbandonedCarts { get; }

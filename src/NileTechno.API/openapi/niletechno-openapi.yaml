@@ -20,6 +20,10 @@ tags:
   - name: Orders
   - name: Reviews
   - name: Cart
+    description: >-
+      السلة تُخزَّن في جدول dbo.Ec_Cart: userId = اي دي حساب العميل، وProductID = اي دي المنتج في EC_Products،
+      وProductServerId = اي دي الصنف في ERP (عمود ItemId)، واللوون والمقاس داخل عمود Notes كـ JSON.
+      أي صنف Status=0 أو مجموعته Status=0 لا تظهر في الكارت ولا يمكن اضافتها (400).
   - name: Wishlist
   - name: Addresses
   - name: Coupons
@@ -486,9 +490,10 @@ components:
 
     CartItem:
       type: object
+      description: عنصر السلة — id هو رقم صف جدول Ec_Cart (integer وليس GUID)
       properties:
-        id: { type: string }
-        productId: { type: string }
+        id: { type: integer, format: int32 }
+        productId: { type: string, description: كود المنتج (EC_Products.Code) }
         quantity: { type: integer }
         color: { type: string, nullable: true }
         size: { type: string, nullable: true }
@@ -1135,7 +1140,7 @@ paths:
                   success: { type: boolean }
                   order: { $ref: '#/components/schemas/Order' }
         '400':
-          description: بيانات ناقصة — {success:false, errors:["اسم العميل مطلوب", ...]}
+          description: بيانات ناقصة أو منتج غير متاح — {success:false, errors:["اسم العميل مطلوب", "المنتج 'X' غير موجود أو غير متاح حاليًا", ...]}
           content:
             application/json:
               schema:
@@ -1365,6 +1370,14 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/SuccessResponse' }
+        '400':
+          description: ناقص userId/productId أو كود المنتج غير موجود أو موقوف (Status=0)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
 
     delete:
       tags: [Cart]
@@ -1386,6 +1399,7 @@ paths:
     post:
       tags: [Cart]
       summary: Replace cart contents
+      description: يستبدل كل صفوف Ec_Cart الخاصة باليوزر بمحتوى الطلب (الحذف ثم Upsert).
       requestBody:
         required: true
         content:
@@ -1396,25 +1410,47 @@ paths:
           description: Synchronized
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/SuccessResponse' }
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  replaced: { type: integer, description: عدد الصفوف التي تم ادراجها أو تحديثها }
+                  removed: { type: integer, description: عدد صفوف Ec_Cart التي تم حذفها }
+        '400':
+          description: userId مفقود
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
 
   /api/cart/{itemId}:
     delete:
       tags: [Cart]
       summary: Delete cart item
       parameters:
-        - { name: itemId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: itemId, in: path, required: true, schema: { type: integer, format: int32 }, description: رقم صف Ec_Cart (id العائد من GET /api/cart) }
       responses:
         '200':
           description: Deleted
           content:
             application/json:
               schema: { $ref: '#/components/schemas/SuccessResponse' }
+        '404':
+          description: العنصر غير موجود
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string }
 
   /api/wishlist:
     get:
       tags: [Wishlist]
       summary: Get wishlist
+      description: أي صنف Status=0 (أو مجموعته موقوفة) لا يظهر في القائمة — هو غير موجود من وجهة نظر العميل.
       parameters:
         - { name: userId, in: query, required: true, schema: { type: string } }
       responses:

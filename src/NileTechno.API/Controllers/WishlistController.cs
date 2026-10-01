@@ -32,27 +32,29 @@ public class WishlistController : ApiControllerBase
         var products = await _catalog.GetProductsByCodesAsync(
             items.Select(i => i.ProductId).Distinct().ToList(), ct);
 
-        return Ok(items.Select(w =>
-        {
-            products.TryGetValue(w.ProductId, out var p);
-            return new
+        return Ok(items
+            .Where(w => products.ContainsKey(w.ProductId))
+            .Select(w =>
             {
-                id = w.Id,
-                productId = w.ProductId,
-                product = p is null ? (object?)new { id = w.ProductId } : new
+                var p = products[w.ProductId];
+                return new
                 {
-                    id = p.ItemCode,
-                    itemCode = p.ItemCode,
-                    name = p.ItemName,
-                    title = p.ItemName,
-                    price = p.Price,
-                    image = p.Image ?? "",
-                    stock = p.Stock,
-                    groupId = p.GroupId,
-                    category = p.GroupName
-                }
-            };
-        }));
+                    id = w.Id,
+                    productId = w.ProductId,
+                    product = new
+                    {
+                        id = p.ItemCode,
+                        itemCode = p.ItemCode,
+                        name = p.ItemName,
+                        title = p.ItemName,
+                        price = p.Price,
+                        image = p.Image ?? "",
+                        stock = p.Stock,
+                        groupId = p.GroupId,
+                        category = p.GroupName
+                    }
+                };
+            }));
     }
 
     [HttpPost("sync")]

@@ -22,7 +22,6 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
     public DbSet<Coupon> Coupons => Set<Coupon>();
     public DbSet<ShippingZone> ShippingZones => Set<ShippingZone>();
 
-    public DbSet<CartItem> CartItems => Set<CartItem>();
     public DbSet<WishlistItem> WishlistItems => Set<WishlistItem>();
 
     public DbSet<AbandonedCart> AbandonedCarts => Set<AbandonedCart>();
@@ -141,14 +140,6 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
             e.ToTable("Ec_ShippingZones");
             e.HasIndex(s => s.Code).IsUnique();
             e.Property(s => s.Price).HasColumnType("decimal(18,2)");
-        });
-
-        builder.Entity<CartItem>(e =>
-        {
-            e.ToTable("Ec_CartItems");
-            e.Property(c => c.UserId).HasMaxLength(64);
-            e.Property(c => c.ProductId).HasMaxLength(50);
-            e.HasIndex(c => new { c.UserId, c.ProductId, c.SelectedColor, c.SelectedSize });
         });
 
         builder.Entity<WishlistItem>(e =>

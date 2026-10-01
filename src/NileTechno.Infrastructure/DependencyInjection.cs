@@ -65,6 +65,7 @@ public static class DependencyInjection
         services.AddScoped<IItemStockQuery>(sp => sp.GetRequiredService<EcProductCatalogQuery>());
 
         services.AddScoped<IErpSalesPostingService, ErpSalesPostingService>();
+        services.AddScoped<CartStore>();
 
         services.AddHostedService<ProductCatalogSyncService>();
         services.AddHostedService<ErpPostingRetryService>();

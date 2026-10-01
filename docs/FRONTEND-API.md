@@ -8,8 +8,8 @@ Base URL (local dev): `http://localhost:5080`
 - المصادقة: هيدر `Authorization: Bearer <accessToken>` (صلاحية 60 دقيقة). الحسابات العادية role بتاعها `User`؛ حسابات الأدمن (محددَة بإيميلها في إعدادات السيرفر) تاخد `Admin`/`MainAdmin` وقت اللوجين.
 - الأخطاء: إما `{ title, status, errors? }` أو `{ errors: ["..."] }` برسائل عربية.
 - أي حاجة اسمها `productId` في الـ API ده هي **كود الصنف** `itemCode` (زي `"12668"`)، مش UUID.
-- المنتجات والتصنيفات والاستوك بتُقرأ من `EC_Products`/`EC_Groups` اللي بتتحدث من الـ ERP كل دقيقتين — أي صنف `Status=0` أو مجموعته `Status=0` لا تظهر أبدًا في أي endpoint عام.
-- الجداول المستخدمة: EC_Products, EC_Groups, Ec_Orders, Ec_OrderItems, Ec_OrderHistoryEntries, Ec_Reviews, Ec_CartItems, Ec_WishlistItems, Ec_UserAddresses, Ec_Coupons, Ec_ShippingZones, Ec_StoreSettingsList, Ec_ActivityLogs, Ec_AbandonedCarts/Items, Ec_AnalyticsSearches/Views, Ec_StockOverrides, Ec_LoginAccounts.
+- المنتجات والتصنيفات والاستوك بتُقرأ من `EC_Products`/`EC_Groups` اللي بتتحدث من الـ ERP كل دقيقتين — أي صنف `Status=0` أو مجموعته `Status=0` لا يظهر أبدًا للعميل: لا في القوائم، ولا في الكارت، ولا في المفضلة، وإضافته للسلة أو طلبه في أوردر يرجّع 400.
+- الجداول المستخدمة: EC_Products, EC_Groups, Ec_Orders, Ec_OrderItems, Ec_OrderHistoryEntries, Ec_Reviews, Ec_Cart, Ec_WishlistItems, Ec_UserAddresses, Ec_Coupons, Ec_ShippingZones, Ec_StoreSettingsList, Ec_ActivityLogs, Ec_AbandonedCarts/Items, Ec_AnalyticsSearches/Views, Ec_StockOverrides, Ec_ErpPostings, Ec_LoginAccounts. (تم حذف Ec_CartItems وEc_Categories وEC_Rating.)
 
 ---
 
@@ -110,19 +110,21 @@ Base URL (local dev): `http://localhost:5080`
 | POST | `/api/custom-reviews/{id}/approve` | **Admin** | `id` = externalId أو Guid | `{success}` |
 | DELETE | `/api/custom-reviews/{id}` | **Admin** | — | `{success}` |
 
-## 7) السلة (Ec_CartItems — userId نص، productId كود صنف)
+## 7) السلة (Ec_Cart — userId = اي دي الحساب، productId = كود الصنف، id = int)
 | Method | Path | Body/Params | الرد |
 |---|---|---|---|
-| GET | `/api/cart?userId=` | — | `[{id, productId, quantity, color, size, product:{id,name,title,price,image,stock,groupId,category}}]` |
-| POST | `/api/cart` | `{userId, productId, quantity, color?, size?}` | `{success}` upsert بنفس مفتاح (product+color+size) |
-| POST | `/api/cart/sync` | `{userId, items:[{productId,quantity,color,size}]}` | `{success}` — يستبدل السلة بالكامل (مضاف/محذوف/تحديث كمية) |
-| DELETE | `/api/cart/{itemId}` (GUID) | — | `{success}` |
+| GET | `/api/cart?userId=` | — | `[{id(int), productId, quantity, color, size, product:{id,itemCode,name,title,price,image,stock,groupId,category}}]` |
+| POST | `/api/cart` | `{userId, productId, quantity, color?, size?}` | `{success}` upsert بنفس مفتاح (product+color+size) — `400 {error}` لو الكود مش في الكتالوج أو موقوف (Status=0) |
+| POST | `/api/cart/sync` | `{userId, items:[{productId,quantity,color,size}]}` | `{success, replaced, removed}` — يستبدل السلة بالكامل (مضاف/محذوف/تحديث كمية) |
+| DELETE | `/api/cart/{itemId}` (int) | — | `{success}` أو `404 {error}` |
 | DELETE | `/api/cart?userId=` | — | تفريغ السلة `{success, removed}` |
+
+> التخزين: `ProductID` = اي دي المنتج في EC_Products، و`ProductServerId` = ItemId بتاع ERP، واللوون/المقاس في عمود `Notes` كـ JSON — العقد الخارجي كما هو عدا الـ id صار number بدل GUID.
 
 ## 8) المفضلة (Ec_WishlistItems)
 | Method | Path | Body/Params |
 |---|---|---|
-| GET | `/api/wishlist?userId=` | `[{id, productId, product:{...同上}}]` |
+| GET | `/api/wishlist?userId=` | `[{id, productId, product:{نفس شكل الكارت}}]` — الأصناف الموقوفة (Status=0) لا تظهر |
 | POST | `/api/wishlist` | `{userId, productId}` (idempotent) |
 | POST | `/api/wishlist/sync` | `{userId, productIds:["993", ...]}` استبدال كامل |
 | DELETE | `/api/wishlist?userId=&productId=` | حذف صنف من المفضلة |

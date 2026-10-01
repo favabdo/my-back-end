@@ -1,7 +1,4 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using NileTechno.Application.Common.Interfaces;
-using NileTechno.Domain.Entities;
 using NileTechno.Infrastructure.Services;
 
 namespace NileTechno.API.Controllers;
@@ -9,14 +6,9 @@ namespace NileTechno.API.Controllers;
 [Route("api/cart")]
 public class CartController : ApiControllerBase
 {
-    private readonly IApplicationDbContext _db;
-    private readonly EcProductCatalogQuery _catalog;
+    private readonly CartStore _cart;
 
-    public CartController(IApplicationDbContext db, EcProductCatalogQuery catalog)
-    {
-        _db = db;
-        _catalog = catalog;
-    }
+    public CartController(CartStore cart) => _cart = cart;
 
     [HttpGet]
     public async Task<IActionResult> Get([FromQuery] string userId, CancellationToken ct)
@@ -24,37 +16,27 @@ public class CartController : ApiControllerBase
         if (string.IsNullOrWhiteSpace(userId))
             return Ok(new List<object>());
 
-        var items = await _db.CartItems.AsNoTracking()
-            .Where(c => c.UserId == userId.Trim())
-            .OrderBy(c => c.CreatedAt)
-            .ToListAsync(ct);
+        var rows = await _cart.GetByUserAsync(userId.Trim(), ct);
 
-        var products = await _catalog.GetProductsByCodesAsync(
-            items.Select(i => i.ProductId).Distinct().ToList(), ct);
-
-        return Ok(items.Select(c =>
+        return Ok(rows.Select(r => (object)new
         {
-            products.TryGetValue(c.ProductId, out var p);
-            return new
+            id = r.Id,
+            productId = r.Code,
+            quantity = r.Qty,
+            color = r.Color,
+            size = r.Size,
+            product = new
             {
-                id = c.Id,
-                productId = c.ProductId,
-                quantity = c.Quantity,
-                color = c.SelectedColor,
-                size = c.SelectedSize,
-                product = p is null ? (object?)new { id = c.ProductId } : new
-                {
-                    id = p.ItemCode,
-                    itemCode = p.ItemCode,
-                    name = p.ItemName,
-                    title = p.ItemName,
-                    price = p.Price,
-                    image = p.Image ?? "",
-                    stock = p.Stock,
-                    groupId = p.GroupId,
-                    category = p.GroupName
-                }
-            };
+                id = r.Code,
+                itemCode = r.Code,
+                name = r.Name,
+                title = r.Name,
+                price = r.UnitPrice,
+                image = r.Image ?? "",
+                stock = r.Stock,
+                groupId = r.GroupCode,
+                category = r.GroupName
+            }
         }));
     }
 
@@ -67,52 +49,12 @@ public class CartController : ApiControllerBase
 
         var incoming = (body.Items ?? new List<CartItemRequest>())
             .Where(i => !string.IsNullOrWhiteSpace(i.ProductId))
+            .Select(i => new CartStore.Incoming(i.ProductId!.Trim(), i.Quantity, i.Color ?? i.SelectedColor, i.Size ?? i.SelectedSize))
             .ToList();
 
-        var current = await _db.CartItems.Where(c => c.UserId == userId).ToListAsync(ct);
-        var incomingByKey = incoming
-            .GroupBy(i => Key(i.ProductId, i.Color ?? i.SelectedColor, i.Size ?? i.SelectedSize), StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
-        var existingKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var item in current)
-        {
-            var key = Key(item.ProductId, item.SelectedColor, item.SelectedSize);
-            if (!incomingByKey.TryGetValue(key, out var match))
-            {
-                _db.CartItems.Remove(item);
-                continue;
-            }
-            existingKeys.Add(key);
-            var qty = match.Quantity <= 0 ? 1 : match.Quantity;
-            if (item.Quantity != qty)
-            {
-                item.Quantity = qty;
-                item.UpdatedAt = DateTime.UtcNow;
-            }
-        }
-
-        foreach (var req in incoming)
-        {
-            var key = Key(req.ProductId, req.Color ?? req.SelectedColor, req.Size ?? req.SelectedSize);
-            if (existingKeys.Contains(key))
-                continue;
-            _db.CartItems.Add(new CartItem
-            {
-                UserId = userId,
-                ProductId = req.ProductId!.Trim(),
-                Quantity = req.Quantity <= 0 ? 1 : req.Quantity,
-                SelectedColor = req.Color ?? req.SelectedColor,
-                SelectedSize = req.Size ?? req.SelectedSize
-            });
-        }
-
-        await _db.SaveChangesAsync(ct);
-        return Ok(new { success = true });
+        var (replaced, removed) = await _cart.ReplaceAllAsync(userId, incoming, ct);
+        return Ok(new { success = true, replaced, removed });
     }
-
-    private static string Key(string? productId, string? color, string? size) =>
-        $"{productId?.Trim()}|{color ?? ""}|{size ?? ""}";
 
     [HttpPost]
     public async Task<IActionResult> Upsert([FromBody] CartItemRequest body, CancellationToken ct)
@@ -122,46 +64,24 @@ public class CartController : ApiControllerBase
         if (userId.Length == 0 || productId.Length == 0)
             return BadRequest(new { error = "userId و productId مطلوبان" });
 
-        var qty = body.Quantity <= 0 ? 1 : body.Quantity;
-        var color = body.Color ?? body.SelectedColor;
-        var size = body.Size ?? body.SelectedSize;
+        var (ok, error) = await _cart.UpsertAsync(userId,
+            new CartStore.Incoming(productId, body.Quantity, body.Color ?? body.SelectedColor, body.Size ?? body.SelectedSize), ct);
 
-        var existing = await _db.CartItems.FirstOrDefaultAsync(
-            c => c.UserId == userId && c.ProductId == productId
-                 && (c.SelectedColor ?? "") == (color ?? "")
-                 && (c.SelectedSize ?? "") == (size ?? ""), ct);
-
-        if (existing is null)
-            _db.CartItems.Add(new CartItem { UserId = userId, ProductId = productId, Quantity = qty, SelectedColor = color, SelectedSize = size });
-        else
-        {
-            existing.Quantity = qty;
-            existing.UpdatedAt = DateTime.UtcNow;
-        }
-
-        await _db.SaveChangesAsync(ct);
-        return Ok(new { success = true });
+        return ok ? Ok(new { success = true }) : BadRequest(new { error });
     }
 
-    [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    [HttpDelete("{id:int}")]
+    public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
-        var item = await _db.CartItems.FirstOrDefaultAsync(c => c.Id == id, ct);
-        if (item is null)
-            return NotFound(new { error = "العنصر غير موجود" });
-
-        _db.CartItems.Remove(item);
-        await _db.SaveChangesAsync(ct);
-        return Ok(new { success = true });
+        var removed = await _cart.DeleteAsync(id, ct);
+        return removed > 0 ? Ok(new { success = true }) : NotFound(new { error = "العنصر غير موجود" });
     }
 
     [HttpDelete]
     public async Task<IActionResult> Clear([FromQuery] string userId, CancellationToken ct)
     {
-        var items = await _db.CartItems.Where(c => c.UserId == userId.Trim()).ToListAsync(ct);
-        _db.CartItems.RemoveRange(items);
-        await _db.SaveChangesAsync(ct);
-        return Ok(new { success = true, removed = items.Count });
+        var removed = await _cart.ClearAsync(userId.Trim(), ct);
+        return Ok(new { success = true, removed });
     }
 }
 
