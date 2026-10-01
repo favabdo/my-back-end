@@ -78,7 +78,7 @@ Base URL (local dev): `http://localhost:5080`
 | Method | Path | Auth | Body | الرد |
 |---|---|---|---|---|
 | GET | `/api/orders` | — | — | مصفوفة أوردرات كاملة، الأحدث أولًا |
-| POST | `/api/orders` | — | payload الشراء (تحت) | `{success:true, order}` |
+| POST | `/api/orders` | — | payload الشراء (تحت — حقول إجبارية) | `{success:true, order}` أو 400 `{success:false, errors:[...]}` |
 | POST | `/api/orders/update-status` | **Admin** | `{orderId, newStatus, cancelReason?}` — `orderId` يقبل الرقم أو رقم الأوردر "ORD-..." | `{success, order, emailSent}` |
 | POST | `/api/orders/bulk-update-status` | **Admin** | `{orderIds:[...], newStatus, cancelReason?}` | `{success, updatedCount, orders[]}` |
 | POST | `/api/orders/update-note` | **Admin** | `{orderId, note}` | `{success, order}` + سطر history |
@@ -86,7 +86,7 @@ Base URL (local dev): `http://localhost:5080`
 
 > **ERP side-effect (من 2026-09-29، بدون تغيير في أي عقد):** الإنشاء يفتح فاتورة ERP تلقائيًا (TransType=3) فيُخصم المخزون ويظهر في المتجر خلال ~دقيقتين؛ CANCELED/REFUNDED (فردي أو جماعي) والحذف يعقّدون الفاتورة فيرجع المخزون؛ التنشيط من حالة ملغاة ينشرها مجددًا. فشل الفاتورة لا يُفشل الطلب أبدًا (outbox + retry).
 
-**payload إنشاء أوردر (كل الحقول اختيارية عدا customerName/phone/items/total):**
+**payload إنشاء أوردر — الإجباري من 2026-09-30: `customerName` + `customerPhone` + `governorate` + عنوان (أي من `address`/`addressDetails`/`customerAddress`) + `items` (منتج واحد على الأقل، `productId` و`quantity ≥ 1`)؛ والنقص بيرجع 400 `{success:false, errors:[...]}` برسائل عربية):**
 ```json
 { "userId":"5", "customerName":"", "customerPhone":"", "customerEmail":"",
   "customerAddress":"", "customerNotes":"", "governorate":"",

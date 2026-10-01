@@ -39,6 +39,28 @@ public class OrdersCompatController : ApiControllerBase
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateOrderCompatRequest body, CancellationToken ct)
     {
+        var errors = new List<string>();
+        if (string.IsNullOrWhiteSpace(body.CustomerName ?? body.Name))
+            errors.Add("اسم العميل مطلوب");
+        if (string.IsNullOrWhiteSpace(body.CustomerPhone ?? body.Phone))
+            errors.Add("رقم الموبايل مطلوب");
+        if (string.IsNullOrWhiteSpace(body.Governorate))
+            errors.Add("منطقة/محافظة التوصيل مطلوبة");
+        if (string.IsNullOrWhiteSpace(body.Address ?? body.AddressDetails ?? body.CustomerAddress))
+            errors.Add("عنوان التوصيل مطلوب");
+        if (body.Items is null || body.Items.Count == 0)
+            errors.Add("اختار منتج واحد على الأقل قبل تأكيد الأوردر");
+        else
+            foreach (var (idx, item) in body.Items.Select((it, i) => (i + 1, it)))
+            {
+                if (string.IsNullOrWhiteSpace(item.ProductId))
+                    errors.Add($"المنتج رقم {idx} في الأوردر بدون كود تعريف");
+                if (item.Quantity <= 0)
+                    errors.Add($"المنتج رقم {idx} في الأوردر كميته غير صحيحة");
+            }
+        if (errors.Count > 0)
+            return BadRequest(new { success = false, errors });
+
         var uniqueHex = Convert.ToHexString(RandomNumberGenerator.GetBytes(3));
         var orderNumber = "ORD-" + DateTime.UtcNow.ToString("HHmmss") + "-" + uniqueHex;
         var order = new Order

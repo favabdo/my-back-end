@@ -323,13 +323,19 @@ components:
 
     CreateOrderRequest:
       type: object
-      required: [customerName, customerPhone, items, total]
+      description: >
+        إجباري: customerName، customerPhone، governorate، عنوان التوصيل
+        (أي من address/addressDetails/customerAddress)، items (منتج واحد على الأقل
+        بـ productId صحيح وquantity ≥ 1)، total. الخطأ يرجع 400 بصيغة {success:false, errors:[...]}
+      required: [customerName, customerPhone, governorate, items, total]
       properties:
         userId: { type: string }
         customerName: { type: string }
         customerPhone: { type: string }
         customerEmail: { type: string, format: email }
         customerAddress: { type: string }
+        address: { type: string }
+        addressDetails: { type: string }
         customerNotes: { type: string }
         governorate: { type: string }
         coordinates: { $ref: '#/components/schemas/Coordinates' }
@@ -337,6 +343,7 @@ components:
         couponCode: { type: string }
         items:
           type: array
+          minItems: 1
           items: { $ref: '#/components/schemas/OrderItem' }
         total: { type: number, format: double }
         subtotal: { type: number, format: double }
@@ -1127,6 +1134,17 @@ paths:
                 properties:
                   success: { type: boolean }
                   order: { $ref: '#/components/schemas/Order' }
+        '400':
+          description: بيانات ناقصة — {success:false, errors:["اسم العميل مطلوب", ...]}
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  errors:
+                    type: array
+                    items: { type: string }
 
   /api/orders/update-status:
     post:
