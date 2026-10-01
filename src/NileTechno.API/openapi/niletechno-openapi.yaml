@@ -24,6 +24,7 @@ tags:
       السلة تُخزَّن في جدول dbo.Ec_Cart: userId = اي دي حساب العميل، وProductID = اي دي المنتج في EC_Products،
       وProductServerId = اي دي الصنف في ERP (عمود ItemId)، واللوون والمقاس داخل عمود Notes كـ JSON.
       أي صنف Status=0 أو مجموعته Status=0 لا تظهر في الكارت ولا يمكن اضافتها (400).
+      صفوف السلة لا تُحذف فعليًا: الإزالة تسجّل Status=0 والصف يبقى في Ec_Cart، وعند إنشاء أوردر تُختم صفوف اليوزر المرئية بـ OrderID فتختفي من الكارت وتبقى كسجل تاريخي.
   - name: Wishlist
   - name: Addresses
   - name: Coupons

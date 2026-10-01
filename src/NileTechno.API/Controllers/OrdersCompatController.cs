@@ -17,15 +17,17 @@ public class OrdersCompatController : ApiControllerBase
     private readonly ICurrentUserService _currentUser;
     private readonly IErpSalesPostingService _erpPoster;
     private readonly EcProductCatalogQuery _catalog;
+    private readonly CartStore _cart;
 
     public OrdersCompatController(IApplicationDbContext db, IEmailService email, ICurrentUserService currentUser,
-        IErpSalesPostingService erpPoster, EcProductCatalogQuery catalog)
+        IErpSalesPostingService erpPoster, EcProductCatalogQuery catalog, CartStore cart)
     {
         _db = db;
         _email = email;
         _currentUser = currentUser;
         _erpPoster = erpPoster;
         _catalog = catalog;
+        _cart = cart;
     }
 
     [HttpGet]
@@ -113,6 +115,10 @@ public class OrdersCompatController : ApiControllerBase
 
         _db.Orders.Add(order);
         await _db.SaveChangesAsync(ct);
+
+        // صفوف سلة العميل بتتحول لتاريخ: OrderID بيتختم والصف بيختفي من الكارت وبيفضل محفوظ
+        if (order.UserId is int cartUserId)
+            await _cart.StampActiveRowsAsOrdered(cartUserId.ToString(), order.Id, ct);
 
         // تسجّل أولًا في جداول Ec_ ثم تُفتح فاتورة ERP (TransType=3) — الخدمة لا ترمي استثناءات
         await _erpPoster.PostOrderAsync(order.Id, ct);

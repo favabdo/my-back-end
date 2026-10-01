@@ -532,6 +532,7 @@ public class SqlSchemaBootstrapper : ISqlSchemaBootstrapper
                 Price decimal(18,2) NOT NULL CONSTRAINT DF_Ec_Cart_Price DEFAULT (0),
                 Total decimal(18,2) NOT NULL CONSTRAINT DF_Ec_Cart_Total DEFAULT (0),
                 Notes nvarchar(max) NULL,
+                Status bit NOT NULL CONSTRAINT DF_Ec_Cart_Status DEFAULT (1),
                 CreatedAt datetime2 NOT NULL CONSTRAINT DF_Ec_Cart_CreatedAt DEFAULT (SYSUTCDATETIME()),
                 UpdatedAt datetime2 NULL,
                 CONSTRAINT FK_Ec_Cart_Products FOREIGN KEY (ProductID) REFERENCES dbo.EC_Products(Id) ON DELETE CASCADE,
@@ -543,6 +544,7 @@ public class SqlSchemaBootstrapper : ISqlSchemaBootstrapper
             """);
 
         await EnsureColumnAsync(connection, "Ec_Cart", "UserId", "nvarchar(64) NOT NULL CONSTRAINT DF_Ec_Cart_UserId DEFAULT ('')", cancellationToken);
+        await EnsureColumnAsync(connection, "Ec_Cart", "Status", "bit NOT NULL CONSTRAINT DF_Ec_Cart_Status DEFAULT (1)", cancellationToken);
         await ExecuteAsync(connection, """
             IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Ec_Cart_UserId_ProductID' AND object_id = OBJECT_ID('dbo.Ec_Cart'))
                 CREATE INDEX IX_Ec_Cart_UserId_ProductID ON dbo.Ec_Cart (UserId, ProductID);

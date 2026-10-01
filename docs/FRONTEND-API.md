@@ -120,6 +120,8 @@ Base URL (local dev): `http://localhost:5080`
 | DELETE | `/api/cart?userId=` | — | تفريغ السلة `{success, removed}` |
 
 > التخزين: `ProductID` = اي دي المنتج في EC_Products، و`ProductServerId` = ItemId بتاع ERP، واللوون/المقاس في عمود `Notes` كـ JSON — العقد الخارجي كما هو عدا الـ id صار number بدل GUID.
+>
+> **دورة حياة الصف (soft-delete):** حذف صنف من السلة (DELETE أو sync) بيحوّل صف `Ec_Cart` لـ `Status=0` **من غير ما يتمسح** — يفضل في الجدول و`OrderID` فاضي. لما العميل يكمل أوردر، كل صفوف سلة المرئية بتاخده `OrderID` الأوردر الجديد وبتختفي من `GET /api/cart`. يعني: `Status=0, OrderID NULL` = اتشال من السلة، `OrderID NOT NULL` = اتحول لأوردر. الإضافة لو صف مخفي بنفس المفتاح (منتج+لوون+مقاس) موجود — بيترجع نشيط بنفس الـ id بدل Duplicate.
 
 ## 8) المفضلة (Ec_WishlistItems)
 | Method | Path | Body/Params |

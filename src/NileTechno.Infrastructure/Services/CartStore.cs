@@ -36,6 +36,8 @@ public class CartStore
             INNER JOIN dbo.EC_Products AS p ON p.Id = c.ProductID
             LEFT JOIN dbo.EC_Groups AS g ON g.Id = p.GroupID
             WHERE c.UserId = @userId
+              AND c.Status = 1
+              AND c.OrderID IS NULL
               AND p.Status = 1
               AND (p.GroupID IS NULL OR g.Status = 1)
             ORDER BY c.CreatedAt;
@@ -85,7 +87,8 @@ public class CartStore
         {
             find.CommandText = """
                 SELECT TOP 1 Id FROM dbo.Ec_Cart
-                WHERE UserId = @userId AND ProductID = @dbId AND ISNULL(Notes, N'') = ISNULL(@notes, N'')
+                WHERE UserId = @userId AND ProductID = @dbId AND OrderID IS NULL
+                  AND ISNULL(Notes, N'') = ISNULL(@notes, N'')
                 ORDER BY Id;
                 """;
             find.Parameters.AddWithValue("@userId", userId);
@@ -99,7 +102,7 @@ public class CartStore
             await using var update = connection.CreateCommand();
             update.CommandText = """
                 UPDATE dbo.Ec_Cart
-                SET Qty = @qty, Price = @price, Total = @total, UpdatedAt = SYSUTCDATETIME()
+                SET Qty = @qty, Price = @price, Total = @total, Status = 1, UpdatedAt = SYSUTCDATETIME()
                 WHERE Id = @id;
                 """;
             update.Parameters.AddWithValue("@qty", qty);
@@ -140,7 +143,7 @@ public class CartStore
         var current = new List<(int Id, int DbId, string? Notes)>();
         await using (var list = connection.CreateCommand())
         {
-            list.CommandText = "SELECT Id, ProductID, Notes FROM dbo.Ec_Cart WHERE UserId = @userId;";
+            list.CommandText = "SELECT Id, ProductID, Notes FROM dbo.Ec_Cart WHERE UserId = @userId AND Status = 1 AND OrderID IS NULL;";
             list.Parameters.AddWithValue("@userId", userId);
             await using var reader = await list.ExecuteReaderAsync(ct);
             while (await reader.ReadAsync(ct))
@@ -172,7 +175,7 @@ public class CartStore
             if (incomingKeys.ContainsKey(key)) continue;
 
             await using var del = connection.CreateCommand();
-            del.CommandText = "DELETE FROM dbo.Ec_Cart WHERE Id = @id;";
+            del.CommandText = "UPDATE dbo.Ec_Cart SET Status = 0, UpdatedAt = SYSUTCDATETIME() WHERE Id = @id;";
             del.Parameters.AddWithValue("@id", rowId);
             removed += await del.ExecuteNonQueryAsync(ct);
         }
@@ -191,7 +194,7 @@ public class CartStore
     {
         await using var connection = Open();
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = "DELETE FROM dbo.Ec_Cart WHERE Id = @id;";
+        cmd.CommandText = "UPDATE dbo.Ec_Cart SET Status = 0, UpdatedAt = SYSUTCDATETIME() WHERE Id = @id AND Status = 1;";
         cmd.Parameters.AddWithValue("@id", id);
         return await cmd.ExecuteNonQueryAsync(ct);
     }
@@ -200,7 +203,23 @@ public class CartStore
     {
         await using var connection = Open();
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = "DELETE FROM dbo.Ec_Cart WHERE UserId = @userId;";
+        cmd.CommandText = """
+            UPDATE dbo.Ec_Cart SET Status = 0, UpdatedAt = SYSUTCDATETIME()
+            WHERE UserId = @userId AND Status = 1 AND OrderID IS NULL;
+            """;
+        cmd.Parameters.AddWithValue("@userId", userId);
+        return await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task<int> StampActiveRowsAsOrdered(string userId, int orderId, CancellationToken ct)
+    {
+        await using var connection = Open();
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            UPDATE dbo.Ec_Cart SET OrderID = @orderId, UpdatedAt = SYSUTCDATETIME()
+            WHERE UserId = @userId AND Status = 1 AND OrderID IS NULL;
+            """;
+        cmd.Parameters.AddWithValue("@orderId", orderId);
         cmd.Parameters.AddWithValue("@userId", userId);
         return await cmd.ExecuteNonQueryAsync(ct);
     }
