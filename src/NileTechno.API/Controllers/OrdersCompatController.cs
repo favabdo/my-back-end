@@ -236,6 +236,48 @@ public class OrdersCompatController : ApiControllerBase
             await _erpPoster.RestoreOrderAsync(orderId, ct);
     }
 
+    [Authorize]
+    [HttpGet("user/{userId:int}")]
+    public async Task<IActionResult> ListForAccount(int userId, CancellationToken ct)
+    {
+        if (!IsPrivileged() && CurrentAccountId() != userId)
+            return StatusCode(403, new { error = "غير مسموح الاطلاع على أوردرات عميل آخر" });
+
+        var orders = await _db.Orders.AsNoTracking()
+            .Include(o => o.Items)
+            .Include(o => o.History)
+            .Where(o => o.UserId == userId)
+            .OrderByDescending(o => o.CreatedAt)
+            .ToListAsync(ct);
+        return Ok(orders.Select(Map));
+    }
+
+    [Authorize]
+    [HttpGet("{id}")]
+    public async Task<IActionResult> GetById(string id, CancellationToken ct)
+    {
+        var order = await FindOrderAsync(id, ct);
+        if (order is null)
+            return NotFound(new { error = "الطلب غير موجود" });
+
+        if (!IsPrivileged() && !IsOwner(order))
+            return StatusCode(403, new { error = "غير مسموح الاطلاع على أوردر عميل آخر" });
+
+        return Ok(Map(order));
+    }
+
+    private bool IsPrivileged() => User.IsInRole("Admin") || User.IsInRole("MainAdmin");
+
+    private int CurrentAccountId() =>
+        int.TryParse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var id) ? id : -1;
+
+    private bool IsOwner(Order order) =>
+        order.UserId == CurrentAccountId()
+        || (!string.IsNullOrWhiteSpace(order.CustomerEmail)
+            && string.Equals(order.CustomerEmail,
+                User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value,
+                StringComparison.OrdinalIgnoreCase));
+
     private async Task<Order?> FindOrderAsync(string orderId, CancellationToken ct) =>
         await _db.Orders
             .Include(o => o.Items)

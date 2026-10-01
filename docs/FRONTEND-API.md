@@ -77,7 +77,9 @@ Base URL (local dev): `http://localhost:5080`
 ## 5) الأوردرات (Ec_Orders — int ids)
 | Method | Path | Auth | Body | الرد |
 |---|---|---|---|---|
-| GET | `/api/orders` | — | — | مصفوفة أوردرات كاملة، الأحدث أولًا |
+| GET | `/api/orders` | — | — | مصفوفة أوردرات كاملة، الأحدث أولًا (لوحة الأدمن) |
+| GET | `/api/orders/user/{userId}` | **Bearer** | — | أوردرات العميل ده بس — صاحبه أو Admin؛ غيرهما 403، ومن غير توكن 401 |
+| GET | `/api/orders/{id}` | **Bearer** | `id` رقم أو `ORD-...` | أوردر واحد — صاحبه (بحسابه أو بإيميله) أو Admin؛ غيرهما 403، مفقود 404 |
 | POST | `/api/orders` | — | payload الشراء (تحت — حقول إجبارية) | `{success:true, order}` أو 400 `{success:false, errors:[...]}` |
 | POST | `/api/orders/update-status` | **Admin** | `{orderId, newStatus, cancelReason?}` — `orderId` يقبل الرقم أو رقم الأوردر "ORD-..." | `{success, order, emailSent}` |
 | POST | `/api/orders/bulk-update-status` | **Admin** | `{orderIds:[...], newStatus, cancelReason?}` | `{success, updatedCount, orders[]}` |
