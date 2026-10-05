@@ -24,6 +24,7 @@ public class WishlistController : ApiControllerBase
     public async Task<IActionResult> Get([FromQuery] string? userId, CancellationToken ct)
     {
         var owner = EffectiveUserId(userId);
+        if (owner is null) return UserIdMismatch();
 
         var items = await _db.WishlistItems.AsNoTracking()
             .Where(w => w.UserId == owner)
@@ -62,6 +63,7 @@ public class WishlistController : ApiControllerBase
     public async Task<IActionResult> Sync([FromBody] WishlistSyncRequest body, CancellationToken ct)
     {
         var userId = EffectiveUserId(body.UserId);
+        if (userId is null) return UserIdMismatch();
 
         var incoming = (body.ProductIds ?? new List<string>())
             .Where(p => !string.IsNullOrWhiteSpace(p))
@@ -84,6 +86,7 @@ public class WishlistController : ApiControllerBase
     public async Task<IActionResult> Add([FromBody] WishlistRequest body, CancellationToken ct)
     {
         var userId = EffectiveUserId(body.UserId);
+        if (userId is null) return UserIdMismatch();
         var productId = (body.ProductId ?? "").Trim();
         if (productId.Length == 0)
             return BadRequest(new { error = "productId مطلوب" });
@@ -101,6 +104,7 @@ public class WishlistController : ApiControllerBase
     public async Task<IActionResult> Remove([FromQuery] string? userId, [FromQuery] string? productId, CancellationToken ct)
     {
         var owner = EffectiveUserId(userId);
+        if (owner is null) return UserIdMismatch();
         var code = (productId ?? "").Trim();
         if (code.Length == 0)
             return BadRequest(new { error = "productId مطلوب" });

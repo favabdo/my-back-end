@@ -16,6 +16,7 @@ public class CartController : ApiControllerBase
     public async Task<IActionResult> Get([FromQuery] string? userId, CancellationToken ct)
     {
         var owner = EffectiveUserId(userId);
+        if (owner is null) return UserIdMismatch();
 
         var rows = await _cart.GetByUserAsync(owner, ct);
 
@@ -45,6 +46,7 @@ public class CartController : ApiControllerBase
     public async Task<IActionResult> Sync([FromBody] CartSyncRequest body, CancellationToken ct)
     {
         var userId = EffectiveUserId(body.UserId);
+        if (userId is null) return UserIdMismatch();
 
         var incoming = (body.Items ?? new List<CartItemRequest>())
             .Where(i => !string.IsNullOrWhiteSpace(i.ProductId))
@@ -59,6 +61,7 @@ public class CartController : ApiControllerBase
     public async Task<IActionResult> Upsert([FromBody] CartItemRequest body, CancellationToken ct)
     {
         var userId = EffectiveUserId(body.UserId);
+        if (userId is null) return UserIdMismatch();
         var productId = (body.ProductId ?? "").Trim();
         if (productId.Length == 0)
             return BadRequest(new { error = "productId مطلوب" });
@@ -79,7 +82,9 @@ public class CartController : ApiControllerBase
     [HttpDelete]
     public async Task<IActionResult> Clear([FromQuery] string? userId, CancellationToken ct)
     {
-        var removed = await _cart.ClearAsync(EffectiveUserId(userId), ct);
+        var owner = EffectiveUserId(userId);
+        if (owner is null) return UserIdMismatch();
+        var removed = await _cart.ClearAsync(owner, ct);
         return Ok(new { success = true, removed });
     }
 }

@@ -20,6 +20,7 @@ public class AddressesController : ApiControllerBase
     public async Task<IActionResult> Get([FromQuery] string? userId, CancellationToken ct)
     {
         var owner = EffectiveUserId(userId);
+        if (owner is null) return UserIdMismatch();
 
         var list = await _db.UserAddresses.AsNoTracking()
             .Where(a => a.UserId == owner)
@@ -33,6 +34,7 @@ public class AddressesController : ApiControllerBase
     public async Task<IActionResult> Create([FromBody] AddressInput body, CancellationToken ct)
     {
         var userId = EffectiveUserId(body.UserId);
+        if (userId is null) return UserIdMismatch();
         var address = new UserAddress { UserId = userId };
         _db.UserAddresses.Add(address);
         Apply(address, body);
@@ -55,6 +57,7 @@ public class AddressesController : ApiControllerBase
     public async Task<IActionResult> Update(int id, [FromBody] AddressInput body, CancellationToken ct)
     {
         var userId = EffectiveUserId(body.UserId);
+        if (userId is null) return UserIdMismatch();
         var address = await _db.UserAddresses.FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId, ct);
         if (address is null)
             return NotFound(new { error = "العنوان غير موجود" });
@@ -94,6 +97,7 @@ public class AddressesController : ApiControllerBase
     public async Task<IActionResult> Delete(int id, [FromQuery] string? userId, CancellationToken ct)
     {
         var owner = EffectiveUserId(userId);
+        if (owner is null) return UserIdMismatch();
         var address = await _db.UserAddresses.FirstOrDefaultAsync(a => a.Id == id && a.UserId == owner, ct);
         if (address is null)
             return NotFound(new { error = "العنوان غير موجود" });
@@ -115,6 +119,7 @@ public class AddressesController : ApiControllerBase
     private async Task<IActionResult> SaveAll(string? userIdRaw, List<AddressRequest>? addresses, CancellationToken ct)
     {
         var userId = EffectiveUserId(userIdRaw);
+        if (userId is null) return UserIdMismatch();
 
         var incoming = addresses ?? new List<AddressRequest>();
         var keepIds = incoming.Where(a => a.Id > 0).Select(a => a.Id!.Value).ToHashSet();

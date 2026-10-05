@@ -15,9 +15,21 @@ public abstract class ApiControllerBase : ControllerBase
 
     protected string TokenUserId => (User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "").Trim();
 
-    /// <summary>Identity always comes from the token; only Admin/MainAdmin may act on another user's id.</summary>
-    protected string EffectiveUserId(string? requestedUserId)
-        => IsPrivileged && !string.IsNullOrWhiteSpace(requestedUserId)
-            ? requestedUserId.Trim()
-            : TokenUserId;
+    /// <summary>
+    /// Identity always comes from the token; only Admin/MainAdmin may act on another user's id.
+    /// Returns null when a non-privileged caller names someone else, so the request is refused
+    /// instead of silently being filed under the caller's own account.
+    /// </summary>
+    protected string? EffectiveUserId(string? requestedUserId)
+    {
+        var requested = (requestedUserId ?? "").Trim();
+        if (IsPrivileged)
+            return requested.Length > 0 ? requested : TokenUserId;
+        return requested.Length == 0 || requested == TokenUserId ? TokenUserId : null;
+    }
+
+    protected IActionResult UserIdMismatch() => StatusCode(StatusCodes.Status403Forbidden, new
+    {
+        error = "userId لا يطابق حساب التوكن — لشغل على حسابك شيل القيمة أو ابعت رقم حسابك، والكتابة لحساب تاني متاحة للأدمن فقط"
+    });
 }

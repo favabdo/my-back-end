@@ -4,6 +4,9 @@ info:
   description: |
     Frontend API Reference for NileTechno E-Commerce API.
     JSON fields use camelCase. Public product/catalog data only includes active ERP products/groups.
+    قاعدة الهوية: في /api/addresses و/api/cart و/api/wishlist أي `userId` مرسل (body أو query) لازم يساوي
+    حساب التوكن — لو مختلف السيرفر بيرفض بـ **403** `{error: "userId لا يطابق حساب التوكن — ..."}`
+    ولا يسجّل على أي حساب. التحديد لحساب تاني متاح لـ `Admin`/`MainAdmin` فقط.
   version: 1.0.0
 
 servers:
@@ -472,7 +475,7 @@ components:
       type: object
       required: [items]
       properties:
-        userId: { type: string, description: يُتجاهل لغير الأدمن — الهوية تُؤخذ من التوكن. الأدمن فقط يستطيع تحديد حساب آخر. }
+        userId: { type: string, description: لحساب عادي لازم يساوي حساب التوكن وإلا 403. الأدمن فقط يستطيع تحديد حساب آخر. }
         items:
           type: array
           items: { $ref: '#/components/schemas/CartItemInput' }
@@ -504,7 +507,7 @@ components:
       allOf:
         - type: object
           properties:
-            userId: { type: string, description: يُتجاهل لغير الأدمن — الهوية تُؤخذ من التوكن }
+            userId: { type: string, description: لحساب عادي لازم يساوي حساب التوكن وإلا 403؛ الهوية تُؤخذ من التوكن }
         - $ref: '#/components/schemas/CartItemInput'
 
     WishlistItem:
@@ -518,14 +521,14 @@ components:
       type: object
       required: [productId]
       properties:
-        userId: { type: string, description: يُتجاهل لغير الأدمن — الهوية من التوكن }
+        userId: { type: string, description: لحساب عادي لازم يساوي حساب التوكن وإلا 403؛ الهوية من التوكن }
         productId: { type: string }
 
     WishlistSyncRequest:
       type: object
       required: [productIds]
       properties:
-        userId: { type: string, description: يُتجاهل لغير الأدمن — الهوية من التوكن }
+        userId: { type: string, description: لحساب عادي لازم يساوي حساب التوكن وإلا 403؛ الهوية من التوكن }
         productIds:
           type: array
           items: { type: string }
@@ -548,7 +551,7 @@ components:
       required: [userId, label, governorate, details, isDefault]
       description: لا يُرسل `id` — الـ id يولّده SQL كرقم تسلسلي (IDENTITY 1,1 — 1 ثم 2 ثم 3)، والتعديل بـ `PUT /api/addresses/{id}`.
       properties:
-        userId: { type: string, description: اي دي حساب العميل (نص زي "37"). لحساب عادي السيرفر بيستخدم هوية التوكن؛ القيمة دي بتتقبل فقط من Admin/MainAdmin }
+        userId: { type: string, description: اي دي حساب العميل (نص زي "37"). لحساب عادي لازم يساوي حساب التوكن وإلا 403؛ قيمة مختلفة بتتقبل فقط من Admin/MainAdmin }
         accessToken:
           type: string
           nullable: true
@@ -576,7 +579,7 @@ components:
       type: object
       required: [userId, addresses]
       properties:
-        userId: { type: string, description: اي دي حساب العميل. لحساب عادي هوية التوكن هي اللي بتشتغل؛ القيمة دي بتتقبل فقط من Admin/MainAdmin }
+        userId: { type: string, description: اي دي حساب العميل. لحساب عادي لازم يساوي حساب التوكن وإلا 403؛ قيمة مختلفة بتتقبل فقط من Admin/MainAdmin }
         addresses:
           type: array
           items: { $ref: '#/components/schemas/AddressSyncItem' }
@@ -1363,7 +1366,7 @@ paths:
       summary: Get cart
       security: [{ bearerAuth: [] }]
       parameters:
-        - { name: userId, in: query, required: false, schema: { type: string }, description: للأدمن فقط — لغير الأدمن تتجاهل السيرفر القيمة وتستخدم هوية التوكن }
+        - { name: userId, in: query, required: false, schema: { type: string }, description: للأدمن فقط — لحساب عادي قيمة مختلفة عن حساب التوكن ترجع 403 }
       responses:
         '200':
           description: Cart items
@@ -1402,7 +1405,7 @@ paths:
       summary: Clear cart
       security: [{ bearerAuth: [] }]
       parameters:
-        - { name: userId, in: query, required: false, schema: { type: string }, description: للأدمن فقط — لغير الأدمن تتجاهل السيرفر القيمة وتستخدم هوية التوكن }
+        - { name: userId, in: query, required: false, schema: { type: string }, description: للأدمن فقط — لحساب عادي قيمة مختلفة عن حساب التوكن ترجع 403 }
       responses:
         '200':
           description: Cart cleared
@@ -1474,7 +1477,7 @@ paths:
       security: [{ bearerAuth: [] }]
       description: أي صنف Status=0 (أو مجموعته موقوفة) لا يظهر في القائمة — هو غير موجود من وجهة نظر العميل.
       parameters:
-        - { name: userId, in: query, required: false, schema: { type: string }, description: للأدمن فقط — لغير الأدمن تتجاهل السيرفر القيمة وتستخدم هوية التوكن }
+        - { name: userId, in: query, required: false, schema: { type: string }, description: للأدمن فقط — لحساب عادي قيمة مختلفة عن حساب التوكن ترجع 403 }
       responses:
         '200':
           description: Wishlist
@@ -1505,7 +1508,7 @@ paths:
       summary: Remove item from wishlist
       security: [{ bearerAuth: [] }]
       parameters:
-        - { name: userId, in: query, required: false, schema: { type: string }, description: للأدمن فقط — لغير الأدمن تتجاهل السيرفر القيمة وتستخدم هوية التوكن }
+        - { name: userId, in: query, required: false, schema: { type: string }, description: للأدمن فقط — لحساب عادي قيمة مختلفة عن حساب التوكن ترجع 403 }
         - { name: productId, in: query, required: true, schema: { type: string } }
       responses:
         '200':
@@ -1537,8 +1540,9 @@ paths:
       summary: List user addresses
       security: [{ bearerAuth: [] }]
       parameters:
-        - { name: userId, in: query, required: false, schema: { type: string }, description: للأدمن فقط — لغير الأدمن تتجاهل السيرفر القيمة وتستخدم هوية التوكن }
+        - { name: userId, in: query, required: false, schema: { type: string }, description: للأدمن فقط — لحساب عادي قيمة مختلفة عن حساب التوكن ترجع 403 }
       responses:
+        '403': { description: userId does not match the token account }
         '200':
           description: Addresses
           content:
@@ -1570,6 +1574,7 @@ paths:
               longitude: 31.0004
               isDefault: false
       responses:
+        '403': { description: userId does not match the token account }
         '200':
           description: Created
           content:
@@ -1594,6 +1599,7 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/AddressSyncRequest' }
       responses:
+        '403': { description: userId does not match the token account }
         '200':
           description: Synchronized
           content:
@@ -1613,6 +1619,7 @@ paths:
               type: array
               items: { $ref: '#/components/schemas/AddressSyncItem' }
       responses:
+        '403': { description: userId does not match the token account }
         '200':
           description: Synchronized
           content:
@@ -1642,6 +1649,7 @@ paths:
               longitude: 31.0004
               isDefault: true
       responses:
+        '403': { description: userId does not match the token account }
         '200':
           description: Updated
           content:
@@ -1660,8 +1668,9 @@ paths:
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
-        - { name: userId, in: query, required: false, schema: { type: string }, description: للأدمن فقط — لغير الأدمن تتجاهل السيرفر القيمة وتستخدم هوية التوكن }
+        - { name: userId, in: query, required: false, schema: { type: string }, description: للأدمن فقط — لحساب عادي قيمة مختلفة عن حساب التوكن ترجع 403 }
       responses:
+        '403': { description: userId does not match the token account }
         '200':
           description: Deleted
           content:
