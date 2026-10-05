@@ -1,6 +1,7 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using NileTechno.API.Auth;
 using NileTechno.API.Middleware;
 using NileTechno.Application;
 using NileTechno.Infrastructure;
@@ -73,6 +74,21 @@ builder.Services.AddAuthentication(options =>
         ValidAudience = jwtSection["Audience"],
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
         ClockSkew = TimeSpan.Zero
+    };
+
+    // Convenience for hand-tested calls: on the address endpoints the JWT may also arrive as
+    // `accessToken` in the JSON body when no Authorization header is present. Validation is unchanged.
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = async context =>
+        {
+            if (context.Request.Headers.Authorization.Count > 0) return;
+            if (!BodyAccessTokenReader.AppliesTo(context.Request)) return;
+
+            var fromBody = await BodyAccessTokenReader.ReadAsync(context.Request);
+            if (!string.IsNullOrWhiteSpace(fromBody))
+                context.Token = fromBody;
+        }
     };
 });
 

@@ -181,6 +181,10 @@ public class AddressSyncRequest
 public class AddressInput
 {
     public string? UserId { get; set; }
+
+    /// <summary>Read by the JwtBearer body fallback; never used by the action itself.</summary>
+    public string? AccessToken { get; set; }
+
     public string? Label { get; set; }
     public string? Governorate { get; set; }
     public string? Details { get; set; }

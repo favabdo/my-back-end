@@ -549,6 +549,15 @@ components:
       description: لا يُرسل `id` — الـ id يولّده SQL (NEWSEQUENTIALID)، والتعديل بـ `PUT /api/addresses/{id}`.
       properties:
         userId: { type: string, description: اي دي حساب العميل (نص زي "37"). لحساب عادي السيرفر بيستخدم هوية التوكن؛ القيمة دي بتتقبل فقط من Admin/MainAdmin }
+        accessToken:
+          type: string
+          nullable: true
+          example: null
+          description: |
+            اختياري للاختبار اليدوي: بدل هيدر Authorization، حط التوكن هنا في الـ body.
+            مقبول على نقاط العناوين (POST/PUT بـ JSON object) بس، وبيتراجع بنفس التحقق
+            (نفس المفتاح والـ issuer والـ audience والصلاحية). لو الهيدر موجود هو الأولوية.
+            مسارات تانية (كارت/مفضلة/أوردرات) بترفض التوكن من الـ body وترجع 401.
         label: { type: string }
         governorate: { type: string }
         details: { type: string }
@@ -1552,6 +1561,7 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/AddressInput' }
             example:
+              accessToken: null
               userId: "37"
               label: "Home"
               governorate: "Gharbia"
@@ -1594,7 +1604,7 @@ paths:
       tags: [Addresses]
       summary: Replace all user addresses (array body)
       security: [{ bearerAuth: [] }]
-      description: نفس `POST /api/addresses/sync` لكن الـ body مصفوفة عناوين مباشرة بدون غلاف.
+      description: نفس `POST /api/addresses/sync` لكن الـ body مصفوفة عناوين مباشرة بدون غلاف — وده المسار الوحيد اللي لا يقبل `accessToken` في الـ body (المصفوفة مفيهاش مكان ليه)، فلازم هيدر Authorization.
       requestBody:
         required: true
         content:
@@ -1623,6 +1633,7 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/AddressInput' }
             example:
+              accessToken: null
               userId: "37"
               label: "Home"
               governorate: "Gharbia"
