@@ -28,46 +28,64 @@ public class AddressesController : ApiControllerBase
     }
 
     [HttpPost]
-    public async Task<IActionResult> Save([FromBody] AddressRequest body, CancellationToken ct)
+    public async Task<IActionResult> Create([FromBody] AddressInput body, CancellationToken ct)
     {
-        var userId = EffectiveUserId(body.UserId);
+        var userId = TokenUserId;
+        var address = new UserAddress { UserId = userId };
+        _db.UserAddresses.Add(address);
+        Apply(address, body);
 
-        UserAddress address;
-        if (body.Id is Guid id && id != Guid.Empty)
+        if (body.IsDefault)
         {
-            var found = await _db.UserAddresses.FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId, ct);
-            if (found is null)
-                return NotFound(new { error = "العنوان غير موجود" });
-            address = found;
+            await ClearOtherDefaultsAsync(userId, address.Id, ct);
+            address.IsDefault = true;
         }
         else
         {
-            address = new UserAddress { UserId = userId };
-            _db.UserAddresses.Add(address);
+            address.IsDefault = !await _db.UserAddresses.AnyAsync(a => a.UserId == userId && a.Id != address.Id, ct);
         }
 
+        await _db.SaveChangesAsync(ct);
+        return Ok(new { success = true, address = Map(address) });
+    }
+
+    [HttpPut("{id:guid}")]
+    public async Task<IActionResult> Update(Guid id, [FromBody] AddressInput body, CancellationToken ct)
+    {
+        var userId = TokenUserId;
+        var address = await _db.UserAddresses.FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId, ct);
+        if (address is null)
+            return NotFound(new { error = "العنوان غير موجود" });
+
+        Apply(address, body);
+
+        if (body.IsDefault)
+        {
+            await ClearOtherDefaultsAsync(userId, address.Id, ct);
+            address.IsDefault = true;
+        }
+
+        await _db.SaveChangesAsync(ct);
+        return Ok(new { success = true, address = Map(address) });
+    }
+
+    private static void Apply(UserAddress address, AddressInput body)
+    {
         address.Label = body.Label ?? "";
         address.Governorate = body.Governorate ?? "";
         address.Details = body.Details ?? "";
         address.Latitude = body.Latitude;
         address.Longitude = body.Longitude;
         address.UpdatedAt = DateTime.UtcNow;
+    }
 
-        if (body.IsDefault)
-        {
-            var others = await _db.UserAddresses
-                .Where(a => a.UserId == userId && a.Id != address.Id && a.IsDefault)
-                .ToListAsync(ct);
-            foreach (var other in others)
-                other.IsDefault = false;
-        }
-        else if (address.Id == Guid.Empty)
-        {
-            address.IsDefault = !await _db.UserAddresses.AnyAsync(a => a.UserId == userId, ct);
-        }
-
-        await _db.SaveChangesAsync(ct);
-        return Ok(new { success = true, address = Map(address) });
+    private async Task ClearOtherDefaultsAsync(string userId, Guid keepId, CancellationToken ct)
+    {
+        var others = await _db.UserAddresses
+            .Where(a => a.UserId == userId && a.Id != keepId && a.IsDefault)
+            .ToListAsync(ct);
+        foreach (var other in others)
+            other.IsDefault = false;
     }
 
     [HttpDelete("{id:guid}")]
@@ -85,16 +103,16 @@ public class AddressesController : ApiControllerBase
 
 
     [HttpPut("sync")]
-    public async Task<IActionResult> Sync([FromQuery] string userId, [FromBody] List<AddressRequest> addresses, CancellationToken ct)
-        => await SaveAll(userId, addresses, ct);
+    public async Task<IActionResult> Sync([FromBody] List<AddressRequest> addresses, CancellationToken ct)
+        => await SaveAll(addresses, ct);
 
     [HttpPost("sync")]
     public async Task<IActionResult> SyncPost([FromBody] AddressSyncRequest body, CancellationToken ct)
-        => await SaveAll(body.UserId, body.Addresses, ct);
+        => await SaveAll(body.Addresses, ct);
 
-    private async Task<IActionResult> SaveAll(string? userIdRaw, List<AddressRequest>? addresses, CancellationToken ct)
+    private async Task<IActionResult> SaveAll(List<AddressRequest>? addresses, CancellationToken ct)
     {
-        var userId = EffectiveUserId(userIdRaw);
+        var userId = TokenUserId;
 
         var incoming = addresses ?? new List<AddressRequest>();
         var keepIds = incoming.Where(a => a.Id is Guid g && g != Guid.Empty).Select(a => a.Id!.Value).ToHashSet();
@@ -156,19 +174,21 @@ public class AddressesController : ApiControllerBase
 
 public class AddressSyncRequest
 {
-    public string? UserId { get; set; }
     public List<AddressRequest>? Addresses { get; set; }
 }
 
-public class AddressRequest
+public class AddressInput
 {
-    public Guid? Id { get; set; }
-    public string? UserId { get; set; }
     public string? Label { get; set; }
     public string? Governorate { get; set; }
     public string? Details { get; set; }
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
     public bool IsDefault { get; set; }
+}
+
+public class AddressRequest : AddressInput
+{
+    public Guid? Id { get; set; }
 }
 

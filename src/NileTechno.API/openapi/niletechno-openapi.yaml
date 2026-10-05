@@ -546,32 +546,29 @@ components:
     AddressInput:
       type: object
       required: [label, governorate, details, isDefault]
+      description: لا يُرسل أي معرّف — الـ id يولّده SQL (NEWSEQUENTIALID)، والعميل صاحب العنوان يُقرأ من التوكن.
       properties:
-        userId: { type: string, description: يُتجاهل لغير الأدمن — الهوية من التوكن }
-        id:
-          type: string
-          format: uuid
-          nullable: true
-          example: null
-          description: |
-            اختياري. اتركه null او احذفه لانشاء عنوان جديد.
-            قيمته فقط عند التعديل ويجب ان تكون id عنوان موجود فعلًا لنفس الـ userId؛
-            id غير موجود يرجع 404 "العنوان غير موجود".
         label: { type: string }
         governorate: { type: string }
         details: { type: string }
         latitude: { type: number, format: double }
         longitude: { type: number, format: double }
-        isDefault: { type: boolean }
+        isDefault: { type: boolean, description: أول عنوان للحساب يبقى default تلقائيًا حتى لو وصلت false }
+
+    AddressSyncItem:
+      allOf:
+        - $ref: '#/components/schemas/AddressInput'
+        - type: object
+          properties:
+            id: { type: string, format: uuid, nullable: true, example: null, description: id عنوان موجود فعلًا لنفس الحساب؛ null = عنوان جديد }
 
     AddressSyncRequest:
       type: object
       required: [addresses]
       properties:
-        userId: { type: string, description: يُتجاهل لغير الأدمن — الهوية من التوكن }
         addresses:
           type: array
-          items: { $ref: '#/components/schemas/AddressInput' }
+          items: { $ref: '#/components/schemas/AddressSyncItem' }
 
     Coupon:
       type: object
@@ -1541,19 +1538,17 @@ paths:
 
     post:
       tags: [Addresses]
-      summary: Create or update address
+      summary: Create address
       security: [{ bearerAuth: [] }]
       description: |
-        انشاء عنوان جديد: اترك `id` بقيمة null او احذفه من الـ body.
-        تعديل عنوان: أرسل `id` عنوان موجود فعلًا لنفس الـ userId، غير ذلك يرجع 404.
+        إنشاء عنوان لحساب التوكن. لا يُرسل `id` ولا `userId`: الـ id يولّده SQL،
+        وصاحب العنوان يُقرأ من التوكن. أول عنوان في الحساب يبقى default تلقائيًا.
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: '#/components/schemas/AddressInput' }
             example:
-              userId: "37"
-              id: null
               label: "Home"
               governorate: "Gharbia"
               details: "Tanta, El Bahr Street, Building 15, Apartment 4"
@@ -1562,10 +1557,14 @@ paths:
               isDefault: false
       responses:
         '200':
-          description: Saved
+          description: Created
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Address' }
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  address: { $ref: '#/components/schemas/Address' }
 
   /api/addresses/sync:
     post:
@@ -1573,8 +1572,8 @@ paths:
       summary: Replace all user addresses
       security: [{ bearerAuth: [] }]
       description: |
-        يستبدل القائمة بالكامل: أي عنوان محفوظ غير موجود في `addresses` يتم حذفه.
-        بعث `id: null` للعنوان الجديد و`id` الحقيقي للتعديل، وابعث القائمة كاملة.
+        يستبدل عناوين حساب التوكن بالكامل: أي عنوان محفوظ غير موجود في `addresses` يتم حذفه.
+        أرسل `id: null` للعنوان الجديد و`id` العنوان القائم للتعديل، والقائمة يجب أن تكون كاملة.
       requestBody:
         required: true
         content:
@@ -1587,7 +1586,58 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/SuccessResponse' }
 
+    put:
+      tags: [Addresses]
+      summary: Replace all user addresses (array body)
+      security: [{ bearerAuth: [] }]
+      description: نفس `POST /api/addresses/sync` لكن الـ body مصفوفة عناوين مباشرة بدون غلاف.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: '#/components/schemas/AddressSyncItem' }
+      responses:
+        '200':
+          description: Synchronized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SuccessResponse' }
+
   /api/addresses/{id}:
+    put:
+      tags: [Addresses]
+      summary: Update address
+      security: [{ bearerAuth: [] }]
+      description: تعديل عنوان مملوك لحساب التوكن. لا يوجد معامل `userId` هنا — الكتابة دايمًا على حساب المرسل نفسه، وعنوان حساب آخر يرجع 404.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AddressInput' }
+            example:
+              label: "Home"
+              governorate: "Gharbia"
+              details: "Tanta, El Bahr Street, Building 15, Apartment 4"
+              latitude: 30.7865
+              longitude: 31.0004
+              isDefault: true
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  address: { $ref: '#/components/schemas/Address' }
+        '404':
+          description: العنوان غير موجود أو مملوك لحساب آخر
+
     delete:
       tags: [Addresses]
       summary: Delete address
