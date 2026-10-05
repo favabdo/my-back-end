@@ -533,7 +533,7 @@ components:
     Address:
       type: object
       properties:
-        id: { type: string, format: uuid }
+        id: { type: integer, description: رقم تسلسلي بيولّده SQL (IDENTITY 1,1) — 1 ثم 2 ثم 3 }
         userId: { type: string }
         label: { type: string }
         governorate: { type: string }
@@ -546,7 +546,7 @@ components:
     AddressInput:
       type: object
       required: [userId, label, governorate, details, isDefault]
-      description: لا يُرسل `id` — الـ id يولّده SQL (NEWSEQUENTIALID)، والتعديل بـ `PUT /api/addresses/{id}`.
+      description: لا يُرسل `id` — الـ id يولّده SQL كرقم تسلسلي (IDENTITY 1,1 — 1 ثم 2 ثم 3)، والتعديل بـ `PUT /api/addresses/{id}`.
       properties:
         userId: { type: string, description: اي دي حساب العميل (نص زي "37"). لحساب عادي السيرفر بيستخدم هوية التوكن؛ القيمة دي بتتقبل فقط من Admin/MainAdmin }
         accessToken:
@@ -570,7 +570,7 @@ components:
         - $ref: '#/components/schemas/AddressInput'
         - type: object
           properties:
-            id: { type: string, format: uuid, nullable: true, example: null, description: id عنوان موجود فعلًا لنفس الحساب؛ null = عنوان جديد }
+            id: { type: integer, nullable: true, example: null, description: id عنوان موجود فعلًا لنفس الحساب (رقم مثل 1)؛ null = عنوان جديد. أي قيمة مش رقم صحيح موجب (مفتاح قديم GUID أو "addr_...") بتتعامل كعنوان جديد }
 
     AddressSyncRequest:
       type: object
@@ -1552,7 +1552,7 @@ paths:
       summary: Create address
       security: [{ bearerAuth: [] }]
       description: |
-        إنشاء عنوان. `id` لا يُرسل: الـ id يولّده SQL، والتعديل على `PUT /api/addresses/{id}`.
+        إنشاء عنوان. `id` لا يُرسل: SQL يعطيه رقم تسلسلي (1 ثم 2 ثم 3)، والتعديل على `PUT /api/addresses/{id}`.
         العنوان بيتسجل لصاحب التوكن؛ `userId` في الـ body بيشتغل فقط لو المرسل Admin/MainAdmin.
         أول عنوان في الحساب يبقى default تلقائيًا.
       requestBody:
@@ -1626,7 +1626,7 @@ paths:
       security: [{ bearerAuth: [] }]
       description: تعديل عنوان مملوك لحساب التوكن — `userId` في الـ body يُحترم فقط من Admin/MainAdmin، وعنوان حساب آخر يرجع 404. الـ id من المسار وليس من الـ body.
       parameters:
-        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: id, in: path, required: true, schema: { type: integer } }
       requestBody:
         required: true
         content:
@@ -1659,7 +1659,7 @@ paths:
       summary: Delete address
       security: [{ bearerAuth: [] }]
       parameters:
-        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: id, in: path, required: true, schema: { type: integer } }
         - { name: userId, in: query, required: false, schema: { type: string }, description: للأدمن فقط — لغير الأدمن تتجاهل السيرفر القيمة وتستخدم هوية التوكن }
       responses:
         '200':

@@ -137,15 +137,15 @@ Base URL (local dev): `http://localhost:5080`
 | DELETE | `/api/wishlist?userId=&productId=` | **Bearer** | حذف صنف من مفضلة **المرسل نفسه** — `productId` مطلوب، وما بقيش ممكن تعدّي على قائمة حساب تاني |
 
 ## 9) العناوين (Ec_UserAddresses)
-> **Bearer إجباري** على كل النقاط (بدونه 401). **`userId` بيتبعت**: للحساب العادي السيرفر بيشتغل على هوية التوكن وبيتجاهل القيمة، والقيمة تُحترم فقط لو المرسل `Admin`/`MainAdmin`. **مفيش `id` في body الإنشاء**: الـ id بيولّده SQL (`NEWSEQUENTIALID`)، والتعديل بـ `PUT /api/addresses/{id}`.
+> **Bearer إجباري** على كل النقاط (بدونه 401). **`userId` بيتبعت**: للحساب العادي السيرفر بيشتغل على هوية التوكن وبيتجاهل القيمة، والقيمة تُحترم فقط لو المرسل `Admin`/`MainAdmin`. **مفيش `id` في body الإنشاء**: الـ id رقم تسلسلي بيولّده SQL (`IDENTITY(1,1)` — 1 ثم 2 ثم 3)، والتعديل بـ `PUT /api/addresses/{id}`.
 > **التوكن من الـ body (للعناوين بس):** في `POST /api/addresses` و`PUT /api/addresses/{id}` و`POST /api/addresses/sync` ممكن بدل هيدر `Authorization` تحط `"accessToken": "<التوكن>"` جوه الـ JSON object — بيتحقق بنفس الطريقة بالظبط (نفس المفتاح/الـ issuer/الـ audience/الصلاحية)، ولو الهيدر موجود فهو الأولوية. `PUT /api/addresses/sync` (مصفوفة) والكارت والمفضلة والأوردرات **ما بتقبلش** التوكن من الـ body وترجع 401.
 
 | Method | Path | Auth | Body/Params |
 |---|---|---|---|
-| GET | `/api/addresses?userId=` | **Bearer** | `[{id(GUID), userId, label, governorate, details, latitude, longitude, isDefault, createdAt}]` |
+| GET | `/api/addresses?userId=` | **Bearer** | `[{id(int: 1 ثم 2 ثم 3), userId, label, governorate, details, latitude, longitude, isDefault, createdAt}]` |
 | POST | `/api/addresses` | **Bearer** (أو `accessToken` في الـ body) | `{accessToken?, userId, label, governorate, details, latitude?, longitude?, isDefault}` → `{success, address}`. أول عنوان في الحساب بياخد `isDefault:true` لوحده حتى لو الطلب false |
 | PUT | `/api/addresses/{id}` | **Bearer** (أو `accessToken` في الـ body) | نفس body الإنشاء. عنوان حساب تاني = **404** |
-| POST | `/api/addresses/sync` | **Bearer** | `{userId, addresses:[{id?, label, governorate, details, latitude?, longitude?, isDefault}]}` يستبدل عناوين **حسابك** بالكامل (أي عنوان محفوظ ملهوش في القائمة **بيتحذف**؛ `id:null` = جديد؛ أول عنصر remaining default لو مفيش flag) |
+| POST | `/api/addresses/sync` | **Bearer** | `{userId, addresses:[{id?, label, governorate, details, latitude?, longitude?, isDefault}]}` يستبدل عناوين **حسابك** بالكامل (أي عنوان محفوظ ملهوش في القائمة **بيتحذف**؛ `id:null` = جديد، و`id` أي قيمة مش رقم صحيح موجب (مفتاح قديم زي `addr_1759...` أو GUID) بيتعامل كعنوان جديد؛ أول عنصر remaining default لو مفيش flag) |
 | PUT | `/api/addresses/sync?userId=` | **Bearer** | نفس اللى فوق لكن الـ body مصفوفة مباشرة بدون غلاف `{addresses}` |
 | DELETE | `/api/addresses/{id}?userId=` | **Bearer** | حذف — عنوان حساب تاني بيرجع `404` |
 

@@ -153,6 +153,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
         builder.Entity<UserAddress>(e =>
         {
             e.ToTable("Ec_UserAddresses");
+            e.Property(a => a.Id).ValueGeneratedOnAdd();
             e.Property(a => a.UserId).HasMaxLength(64);
         });
 

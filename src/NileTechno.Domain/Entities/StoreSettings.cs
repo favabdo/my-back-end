@@ -15,8 +15,9 @@ public class StoreSettings : BaseEntity
     public string? ExtraJson { get; set; }
 }
 
-public class UserAddress : BaseEntity
+public class UserAddress
 {
+    public int Id { get; set; }
     public string UserId { get; set; } = string.Empty;
     public string Label { get; set; } = string.Empty;
     public string Governorate { get; set; } = string.Empty;
@@ -24,4 +25,6 @@ public class UserAddress : BaseEntity
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
     public bool IsDefault { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
 }

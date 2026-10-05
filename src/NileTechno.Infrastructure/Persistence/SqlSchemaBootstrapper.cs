@@ -438,6 +438,63 @@ public class SqlSchemaBootstrapper : ISqlSchemaBootstrapper
         await ExecuteAsync(connection, $"DROP TABLE dbo.{table};", cancellationToken);
     }
 
+    private const string UserAddressTableDdl = """
+        CREATE TABLE dbo.Ec_UserAddresses (
+            Id int IDENTITY(1,1) NOT NULL CONSTRAINT PK_UserAddresses PRIMARY KEY,
+            UserId nvarchar(64) NOT NULL,
+            Label nvarchar(100) NOT NULL,
+            Governorate nvarchar(100) NOT NULL,
+            Details nvarchar(500) NULL,
+            Latitude float NULL,
+            Longitude float NULL,
+            IsDefault bit NOT NULL CONSTRAINT DF_UserAddresses_IsDefault DEFAULT (0),
+            CreatedAt datetime2 NOT NULL CONSTRAINT DF_UserAddresses_CreatedAt DEFAULT (SYSUTCDATETIME()),
+            UpdatedAt datetime2 NULL
+        );
+        CREATE INDEX IX_UserAddresses_UserId ON dbo.Ec_UserAddresses (UserId);
+        """;
+
+    private async Task ConvertUserAddressIdToIntIdentityAsync(SqlConnection connection, CancellationToken cancellationToken)
+    {
+        const string table = "Ec_UserAddresses";
+        const string staging = "Ec_UserAddresses_GuidId_Staging";
+
+        if (!await TableExistsAsync(connection, table, cancellationToken)) return;
+        if (await HasIntIdentityIdAsync(connection, table, cancellationToken)) return;
+
+        await using var check = connection.CreateCommand();
+        check.CommandText = """
+            SELECT 1
+            FROM sys.columns c
+            INNER JOIN sys.types ty ON c.user_type_id = ty.user_type_id
+            WHERE c.object_id = OBJECT_ID(N'dbo.' + @table)
+              AND c.name = N'Id' AND ty.name = N'uniqueidentifier';
+            """;
+        check.Parameters.AddWithValue("@table", table);
+        if (await check.ExecuteScalarAsync(cancellationToken) is null) return;
+
+        var rows = await TableRowCountAsync(connection, table, cancellationToken);
+        _logger.LogInformation(
+            "Converting dbo.{Table}.Id from uniqueidentifier to int IDENTITY(1,1); {Rows} rows copied through dbo.{Staging}",
+            table, rows, staging);
+
+        await ExecuteAsync(connection, $"""
+            IF OBJECT_ID(N'dbo.{staging}') IS NOT NULL DROP TABLE dbo.{staging};
+            SELECT * INTO dbo.{staging} FROM dbo.{table};
+            DROP TABLE dbo.{table};
+            """, cancellationToken);
+
+        await ExecuteAsync(connection, UserAddressTableDdl, cancellationToken);
+
+        await ExecuteAsync(connection, $"""
+            INSERT INTO dbo.{table} (UserId, Label, Governorate, Details, Latitude, Longitude, IsDefault, CreatedAt, UpdatedAt)
+            SELECT UserId, Label, Governorate, Details, Latitude, Longitude, IsDefault, CreatedAt, UpdatedAt
+            FROM dbo.{staging}
+            ORDER BY CreatedAt;
+            DROP TABLE dbo.{staging};
+            """, cancellationToken);
+    }
+
     private static async Task EnsureIndexAsync(
         SqlConnection connection,
         string table,
@@ -761,22 +818,8 @@ public class SqlSchemaBootstrapper : ISqlSchemaBootstrapper
             );
             """);
 
-        await DropEmptyTableIfShapeChangedAsync(connection, "Ec_UserAddresses", "UserId", "uniqueidentifier", cancellationToken);
-        await CreateTableIfMissingAsync(connection, "Ec_UserAddresses", cancellationToken, """
-            CREATE TABLE dbo.Ec_UserAddresses (
-                Id uniqueidentifier NOT NULL CONSTRAINT PK_UserAddresses PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
-                UserId nvarchar(64) NOT NULL,
-                Label nvarchar(100) NOT NULL,
-                Governorate nvarchar(100) NOT NULL,
-                Details nvarchar(500) NULL,
-                Latitude float NULL,
-                Longitude float NULL,
-                IsDefault bit NOT NULL CONSTRAINT DF_UserAddresses_IsDefault DEFAULT (0),
-                CreatedAt datetime2 NOT NULL CONSTRAINT DF_UserAddresses_CreatedAt DEFAULT (SYSUTCDATETIME()),
-                UpdatedAt datetime2 NULL
-            );
-            CREATE INDEX IX_UserAddresses_UserId ON dbo.Ec_UserAddresses (UserId);
-            """);
+        await ConvertUserAddressIdToIntIdentityAsync(connection, cancellationToken);
+        await CreateTableIfMissingAsync(connection, "Ec_UserAddresses", cancellationToken, UserAddressTableDdl);
 
         await CreateTableIfMissingAsync(connection, "Ec_StockOverrides", cancellationToken, """
             CREATE TABLE dbo.Ec_StockOverrides (

@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using NileTechno.Application.Common.Interfaces;
 using NileTechno.Domain.Entities;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace NileTechno.API.Controllers;
 
@@ -49,8 +51,8 @@ public class AddressesController : ApiControllerBase
         return Ok(new { success = true, address = Map(address) });
     }
 
-    [HttpPut("{id:guid}")]
-    public async Task<IActionResult> Update(Guid id, [FromBody] AddressInput body, CancellationToken ct)
+    [HttpPut("{id:int}")]
+    public async Task<IActionResult> Update(int id, [FromBody] AddressInput body, CancellationToken ct)
     {
         var userId = EffectiveUserId(body.UserId);
         var address = await _db.UserAddresses.FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId, ct);
@@ -79,7 +81,7 @@ public class AddressesController : ApiControllerBase
         address.UpdatedAt = DateTime.UtcNow;
     }
 
-    private async Task ClearOtherDefaultsAsync(string userId, Guid keepId, CancellationToken ct)
+    private async Task ClearOtherDefaultsAsync(string userId, int keepId, CancellationToken ct)
     {
         var others = await _db.UserAddresses
             .Where(a => a.UserId == userId && a.Id != keepId && a.IsDefault)
@@ -88,8 +90,8 @@ public class AddressesController : ApiControllerBase
             other.IsDefault = false;
     }
 
-    [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> Delete(Guid id, [FromQuery] string? userId, CancellationToken ct)
+    [HttpDelete("{id:int}")]
+    public async Task<IActionResult> Delete(int id, [FromQuery] string? userId, CancellationToken ct)
     {
         var owner = EffectiveUserId(userId);
         var address = await _db.UserAddresses.FirstOrDefaultAsync(a => a.Id == id && a.UserId == owner, ct);
@@ -115,7 +117,7 @@ public class AddressesController : ApiControllerBase
         var userId = EffectiveUserId(userIdRaw);
 
         var incoming = addresses ?? new List<AddressRequest>();
-        var keepIds = incoming.Where(a => a.Id is Guid g && g != Guid.Empty).Select(a => a.Id!.Value).ToHashSet();
+        var keepIds = incoming.Where(a => a.Id > 0).Select(a => a.Id!.Value).ToHashSet();
         var current = await _db.UserAddresses.Where(a => a.UserId == userId).ToListAsync(ct);
 
         foreach (var stale in current.Where(c => !keepIds.Contains(c.Id)))
@@ -125,7 +127,7 @@ public class AddressesController : ApiControllerBase
         var first = true;
         foreach (var req in incoming)
         {
-            var rid = req.Id ?? Guid.Empty;
+            var rid = req.Id ?? 0;
             var update = await _db.UserAddresses.FirstOrDefaultAsync(a => a.Id == rid && a.UserId == userId, ct);
             var isDefault = anyDefault ? req.IsDefault : first;
             first = false;
@@ -195,6 +197,36 @@ public class AddressInput
 
 public class AddressRequest : AddressInput
 {
-    public Guid? Id { get; set; }
+    [JsonConverter(typeof(ClientAddressIdConverter))]
+    public int? Id { get; set; }
+}
+
+/// <summary>Legacy clients send GUID / "addr_&lt;epoch-ms&gt;" keys; anything that isn't a positive int32 means "new row".</summary>
+public sealed class ClientAddressIdConverter : JsonConverter<int?>
+{
+    public override int? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        switch (reader.TokenType)
+        {
+            case JsonTokenType.Number:
+                if (!reader.TryGetInt64(out var whole))
+                {
+                    reader.GetDouble();
+                    return null;
+                }
+                return whole is > 0 and <= int.MaxValue ? (int)whole : null;
+            case JsonTokenType.String:
+                return int.TryParse(reader.GetString(), out var parsed) && parsed > 0 ? parsed : null;
+            default:
+                reader.Skip();
+                return null;
+        }
+    }
+
+    public override void Write(Utf8JsonWriter writer, int? value, JsonSerializerOptions options)
+    {
+        if (value.HasValue) writer.WriteNumberValue(value.Value);
+        else writer.WriteNullValue();
+    }
 }
 
