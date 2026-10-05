@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using NileTechno.Application.Common.Interfaces;
@@ -6,6 +7,7 @@ using NileTechno.Infrastructure.Services;
 
 namespace NileTechno.API.Controllers;
 
+[Authorize]
 [Route("api/wishlist")]
 public class WishlistController : ApiControllerBase
 {
@@ -19,13 +21,12 @@ public class WishlistController : ApiControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> Get([FromQuery] string userId, CancellationToken ct)
+    public async Task<IActionResult> Get([FromQuery] string? userId, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(userId))
-            return Ok(new List<object>());
+        var owner = EffectiveUserId(userId);
 
         var items = await _db.WishlistItems.AsNoTracking()
-            .Where(w => w.UserId == userId.Trim())
+            .Where(w => w.UserId == owner)
             .OrderByDescending(w => w.CreatedAt)
             .ToListAsync(ct);
 
@@ -60,9 +61,7 @@ public class WishlistController : ApiControllerBase
     [HttpPost("sync")]
     public async Task<IActionResult> Sync([FromBody] WishlistSyncRequest body, CancellationToken ct)
     {
-        var userId = (body.UserId ?? "").Trim();
-        if (userId.Length == 0)
-            return BadRequest(new { error = "userId مطلوب" });
+        var userId = EffectiveUserId(body.UserId);
 
         var incoming = (body.ProductIds ?? new List<string>())
             .Where(p => !string.IsNullOrWhiteSpace(p))
@@ -84,10 +83,10 @@ public class WishlistController : ApiControllerBase
     [HttpPost]
     public async Task<IActionResult> Add([FromBody] WishlistRequest body, CancellationToken ct)
     {
-        var userId = (body.UserId ?? "").Trim();
+        var userId = EffectiveUserId(body.UserId);
         var productId = (body.ProductId ?? "").Trim();
-        if (userId.Length == 0 || productId.Length == 0)
-            return BadRequest(new { error = "userId و productId مطلوبان" });
+        if (productId.Length == 0)
+            return BadRequest(new { error = "productId مطلوب" });
 
         var exists = await _db.WishlistItems.AnyAsync(
             w => w.UserId == userId && w.ProductId == productId, ct);
@@ -99,10 +98,15 @@ public class WishlistController : ApiControllerBase
     }
 
     [HttpDelete]
-    public async Task<IActionResult> Remove([FromQuery] string userId, [FromQuery] string productId, CancellationToken ct)
+    public async Task<IActionResult> Remove([FromQuery] string? userId, [FromQuery] string? productId, CancellationToken ct)
     {
+        var owner = EffectiveUserId(userId);
+        var code = (productId ?? "").Trim();
+        if (code.Length == 0)
+            return BadRequest(new { error = "productId مطلوب" });
+
         var items = await _db.WishlistItems
-            .Where(w => w.UserId == (userId ?? "").Trim() && w.ProductId == (productId ?? "").Trim())
+            .Where(w => w.UserId == owner && w.ProductId == code)
             .ToListAsync(ct);
         _db.WishlistItems.RemoveRange(items);
         await _db.SaveChangesAsync(ct);

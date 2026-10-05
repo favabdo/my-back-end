@@ -17,8 +17,11 @@ public class AbandonedCartsController : ApiControllerBase
     [HttpPost]
     public async Task<IActionResult> Capture([FromBody] AbandonedCartRequest body, CancellationToken ct)
     {
-        var key = !string.IsNullOrWhiteSpace(body.UserId) ? body.UserId.Trim()
-            : (!string.IsNullOrWhiteSpace(body.Id) ? body.Id.Trim() : null);
+        // Guests have no identity, so they supply their own key; a signed-in caller is pinned to their own account id.
+        var key = User.Identity?.IsAuthenticated == true
+            ? TokenUserId
+            : (!string.IsNullOrWhiteSpace(body.UserId) ? body.UserId.Trim()
+                : (!string.IsNullOrWhiteSpace(body.Id) ? body.Id.Trim() : null));
 
         var existingId = key is null
             ? Guid.Empty

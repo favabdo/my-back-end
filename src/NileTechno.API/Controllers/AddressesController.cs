@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using NileTechno.Application.Common.Interfaces;
@@ -5,6 +6,7 @@ using NileTechno.Domain.Entities;
 
 namespace NileTechno.API.Controllers;
 
+[Authorize]
 [Route("api/addresses")]
 public class AddressesController : ApiControllerBase
 {
@@ -13,13 +15,12 @@ public class AddressesController : ApiControllerBase
     public AddressesController(IApplicationDbContext db) => _db = db;
 
     [HttpGet]
-    public async Task<IActionResult> Get([FromQuery] string userId, CancellationToken ct)
+    public async Task<IActionResult> Get([FromQuery] string? userId, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(userId))
-            return Ok(new List<object>());
+        var owner = EffectiveUserId(userId);
 
         var list = await _db.UserAddresses.AsNoTracking()
-            .Where(a => a.UserId == userId.Trim())
+            .Where(a => a.UserId == owner)
             .OrderByDescending(a => a.IsDefault)
             .ToListAsync(ct);
 
@@ -29,9 +30,7 @@ public class AddressesController : ApiControllerBase
     [HttpPost]
     public async Task<IActionResult> Save([FromBody] AddressRequest body, CancellationToken ct)
     {
-        var userId = (body.UserId ?? "").Trim();
-        if (userId.Length == 0)
-            return BadRequest(new { error = "userId مطلوب" });
+        var userId = EffectiveUserId(body.UserId);
 
         UserAddress address;
         if (body.Id is Guid id && id != Guid.Empty)
@@ -74,8 +73,8 @@ public class AddressesController : ApiControllerBase
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, [FromQuery] string? userId, CancellationToken ct)
     {
-        var address = await _db.UserAddresses.FirstOrDefaultAsync(
-            a => a.Id == id && ((userId ?? "").Trim() == "" || a.UserId == userId.Trim()), ct);
+        var owner = EffectiveUserId(userId);
+        var address = await _db.UserAddresses.FirstOrDefaultAsync(a => a.Id == id && a.UserId == owner, ct);
         if (address is null)
             return NotFound(new { error = "العنوان غير موجود" });
 
@@ -95,9 +94,7 @@ public class AddressesController : ApiControllerBase
 
     private async Task<IActionResult> SaveAll(string? userIdRaw, List<AddressRequest>? addresses, CancellationToken ct)
     {
-        var userId = (userIdRaw ?? "").Trim();
-        if (userId.Length == 0)
-            return BadRequest(new { error = "userId مطلوب" });
+        var userId = EffectiveUserId(userIdRaw);
 
         var incoming = addresses ?? new List<AddressRequest>();
         var keepIds = incoming.Where(a => a.Id is Guid g && g != Guid.Empty).Select(a => a.Id!.Value).ToHashSet();

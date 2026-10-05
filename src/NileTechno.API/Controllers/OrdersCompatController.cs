@@ -75,10 +75,16 @@ public class OrdersCompatController : ApiControllerBase
 
         var uniqueHex = Convert.ToHexString(RandomNumberGenerator.GetBytes(3));
         var orderNumber = "ORD-" + DateTime.UtcNow.ToString("HHmmss") + "-" + uniqueHex;
+
+        // Guest checkout has no token, so body.UserId stands; a signed-in caller is pinned to their own account
+        // otherwise their cart rows would be stamped onto another account's order below.
+        var tokenAccountId = CurrentAccountId();
+        var orderUserId = !IsPrivileged && tokenAccountId > 0 ? tokenAccountId : ParseAccountId(body.UserId);
+
         var order = new Order
         {
             OrderNumber = orderNumber,
-            UserId = ParseAccountId(body.UserId),
+            UserId = orderUserId,
             CustomerName = body.CustomerName ?? body.Name ?? "",
             CustomerEmail = body.CustomerEmail ?? body.Email ?? "",
             CustomerPhone = body.CustomerPhone ?? body.Phone ?? "",
@@ -256,7 +262,7 @@ public class OrdersCompatController : ApiControllerBase
     [HttpGet("user/{userId:int}")]
     public async Task<IActionResult> ListForAccount(int userId, CancellationToken ct)
     {
-        if (!IsPrivileged() && CurrentAccountId() != userId)
+        if (!IsPrivileged && CurrentAccountId() != userId)
             return StatusCode(403, new { error = "غير مسموح الاطلاع على أوردرات عميل آخر" });
 
         var orders = await _db.Orders.AsNoTracking()
@@ -276,13 +282,11 @@ public class OrdersCompatController : ApiControllerBase
         if (order is null)
             return NotFound(new { error = "الطلب غير موجود" });
 
-        if (!IsPrivileged() && !IsOwner(order))
+        if (!IsPrivileged && !IsOwner(order))
             return StatusCode(403, new { error = "غير مسموح الاطلاع على أوردر عميل آخر" });
 
         return Ok(Map(order));
     }
-
-    private bool IsPrivileged() => User.IsInRole("Admin") || User.IsInRole("MainAdmin");
 
     private int CurrentAccountId() =>
         int.TryParse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value, out var id) ? id : -1;

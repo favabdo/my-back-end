@@ -190,12 +190,15 @@ public class CartStore
         return (replaced, removed);
     }
 
-    public async Task<int> DeleteAsync(int id, CancellationToken ct)
+    public async Task<int> DeleteAsync(int id, string? userId, CancellationToken ct)
     {
         await using var connection = Open();
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = "UPDATE dbo.Ec_Cart SET Status = 0, UpdatedAt = SYSUTCDATETIME() WHERE Id = @id AND Status = 1;";
+        cmd.CommandText = userId is null
+            ? "UPDATE dbo.Ec_Cart SET Status = 0, UpdatedAt = SYSUTCDATETIME() WHERE Id = @id AND Status = 1;"
+            : "UPDATE dbo.Ec_Cart SET Status = 0, UpdatedAt = SYSUTCDATETIME() WHERE Id = @id AND UserId = @userId AND Status = 1;";
         cmd.Parameters.AddWithValue("@id", id);
+        if (userId is not null) cmd.Parameters.AddWithValue("@userId", userId);
         return await cmd.ExecuteNonQueryAsync(ct);
     }
 

@@ -470,9 +470,9 @@ components:
 
     CartSyncRequest:
       type: object
-      required: [userId, items]
+      required: [items]
       properties:
-        userId: { type: string }
+        userId: { type: string, description: يُتجاهل لغير الأدمن — الهوية تُؤخذ من التوكن. الأدمن فقط يستطيع تحديد حساب آخر. }
         items:
           type: array
           items: { $ref: '#/components/schemas/CartItemInput' }
@@ -503,9 +503,8 @@ components:
     CartUpsertRequest:
       allOf:
         - type: object
-          required: [userId]
           properties:
-            userId: { type: string }
+            userId: { type: string, description: يُتجاهل لغير الأدمن — الهوية تُؤخذ من التوكن }
         - $ref: '#/components/schemas/CartItemInput'
 
     WishlistItem:
@@ -517,16 +516,16 @@ components:
 
     WishlistRequest:
       type: object
-      required: [userId, productId]
+      required: [productId]
       properties:
-        userId: { type: string }
+        userId: { type: string, description: يُتجاهل لغير الأدمن — الهوية من التوكن }
         productId: { type: string }
 
     WishlistSyncRequest:
       type: object
-      required: [userId, productIds]
+      required: [productIds]
       properties:
-        userId: { type: string }
+        userId: { type: string, description: يُتجاهل لغير الأدمن — الهوية من التوكن }
         productIds:
           type: array
           items: { type: string }
@@ -546,10 +545,18 @@ components:
 
     AddressInput:
       type: object
-      required: [userId, label, governorate, details, isDefault]
+      required: [label, governorate, details, isDefault]
       properties:
-        userId: { type: string }
-        id: { type: string, format: uuid }
+        userId: { type: string, description: يُتجاهل لغير الأدمن — الهوية من التوكن }
+        id:
+          type: string
+          format: uuid
+          nullable: true
+          example: null
+          description: |
+            اختياري. اتركه null او احذفه لانشاء عنوان جديد.
+            قيمته فقط عند التعديل ويجب ان تكون id عنوان موجود فعلًا لنفس الـ userId؛
+            id غير موجود يرجع 404 "العنوان غير موجود".
         label: { type: string }
         governorate: { type: string }
         details: { type: string }
@@ -559,9 +566,9 @@ components:
 
     AddressSyncRequest:
       type: object
-      required: [userId, addresses]
+      required: [addresses]
       properties:
-        userId: { type: string }
+        userId: { type: string, description: يُتجاهل لغير الأدمن — الهوية من التوكن }
         addresses:
           type: array
           items: { $ref: '#/components/schemas/AddressInput' }
@@ -1124,7 +1131,7 @@ paths:
     post:
       tags: [Orders]
       summary: Create order
-      description: حفظ الطلب في Ec_Orders ثم فتح فاتورة ERP تلقائيًا (wh_TransHeader TransType=3 + wh_TransDetails) فيُخصم المخزون من ERP ويظهر في المتجر خلال دقيقتين. فشل الفاتورة لا يُفشل الطلب (إعادة محاولة تلقائية في الخلفية).
+      description: حفظ الطلب في Ec_Orders ثم فتح فاتورة ERP تلقائيًا (wh_TransHeader TransType=3 + wh_TransDetails) فيُخصم المخزون من ERP ويظهر في المتجر خلال دقيقتين. فشل الفاتورة لا يُفشل الطلب (إعادة محاولة تلقائية في الخلفية). الطلب المصحوب بتوكن يُسجَّل باسم حساب التوكن ولا يُستخدم فيه `userId` القادم من الـ body (منعًا لختم سلة عميل آخر في أوردر غريب)، والشراء كزائر بدون توكن يحتفظ بسلوك `userId` من الـ body.
       requestBody:
         required: true
         content:
@@ -1346,8 +1353,9 @@ paths:
     get:
       tags: [Cart]
       summary: Get cart
+      security: [{ bearerAuth: [] }]
       parameters:
-        - { name: userId, in: query, required: true, schema: { type: string } }
+        - { name: userId, in: query, required: false, schema: { type: string }, description: للأدمن فقط — لغير الأدمن تتجاهل السيرفر القيمة وتستخدم هوية التوكن }
       responses:
         '200':
           description: Cart items
@@ -1360,6 +1368,7 @@ paths:
     post:
       tags: [Cart]
       summary: Upsert cart item
+      security: [{ bearerAuth: [] }]
       requestBody:
         required: true
         content:
@@ -1383,8 +1392,9 @@ paths:
     delete:
       tags: [Cart]
       summary: Clear cart
+      security: [{ bearerAuth: [] }]
       parameters:
-        - { name: userId, in: query, required: true, schema: { type: string } }
+        - { name: userId, in: query, required: false, schema: { type: string }, description: للأدمن فقط — لغير الأدمن تتجاهل السيرفر القيمة وتستخدم هوية التوكن }
       responses:
         '200':
           description: Cart cleared
@@ -1400,6 +1410,7 @@ paths:
     post:
       tags: [Cart]
       summary: Replace cart contents
+      security: [{ bearerAuth: [] }]
       description: يستبدل كل صفوف Ec_Cart الخاصة باليوزر بمحتوى الطلب (الحذف ثم Upsert).
       requestBody:
         required: true
@@ -1430,6 +1441,7 @@ paths:
     delete:
       tags: [Cart]
       summary: Delete cart item
+      security: [{ bearerAuth: [] }]
       parameters:
         - { name: itemId, in: path, required: true, schema: { type: integer, format: int32 }, description: رقم صف Ec_Cart (id العائد من GET /api/cart) }
       responses:
@@ -1451,9 +1463,10 @@ paths:
     get:
       tags: [Wishlist]
       summary: Get wishlist
+      security: [{ bearerAuth: [] }]
       description: أي صنف Status=0 (أو مجموعته موقوفة) لا يظهر في القائمة — هو غير موجود من وجهة نظر العميل.
       parameters:
-        - { name: userId, in: query, required: true, schema: { type: string } }
+        - { name: userId, in: query, required: false, schema: { type: string }, description: للأدمن فقط — لغير الأدمن تتجاهل السيرفر القيمة وتستخدم هوية التوكن }
       responses:
         '200':
           description: Wishlist
@@ -1466,6 +1479,7 @@ paths:
     post:
       tags: [Wishlist]
       summary: Add item to wishlist
+      security: [{ bearerAuth: [] }]
       requestBody:
         required: true
         content:
@@ -1481,8 +1495,9 @@ paths:
     delete:
       tags: [Wishlist]
       summary: Remove item from wishlist
+      security: [{ bearerAuth: [] }]
       parameters:
-        - { name: userId, in: query, required: true, schema: { type: string } }
+        - { name: userId, in: query, required: false, schema: { type: string }, description: للأدمن فقط — لغير الأدمن تتجاهل السيرفر القيمة وتستخدم هوية التوكن }
         - { name: productId, in: query, required: true, schema: { type: string } }
       responses:
         '200':
@@ -1495,6 +1510,7 @@ paths:
     post:
       tags: [Wishlist]
       summary: Replace wishlist contents
+      security: [{ bearerAuth: [] }]
       requestBody:
         required: true
         content:
@@ -1511,8 +1527,9 @@ paths:
     get:
       tags: [Addresses]
       summary: List user addresses
+      security: [{ bearerAuth: [] }]
       parameters:
-        - { name: userId, in: query, required: true, schema: { type: string } }
+        - { name: userId, in: query, required: false, schema: { type: string }, description: للأدمن فقط — لغير الأدمن تتجاهل السيرفر القيمة وتستخدم هوية التوكن }
       responses:
         '200':
           description: Addresses
@@ -1525,11 +1542,24 @@ paths:
     post:
       tags: [Addresses]
       summary: Create or update address
+      security: [{ bearerAuth: [] }]
+      description: |
+        انشاء عنوان جديد: اترك `id` بقيمة null او احذفه من الـ body.
+        تعديل عنوان: أرسل `id` عنوان موجود فعلًا لنفس الـ userId، غير ذلك يرجع 404.
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: '#/components/schemas/AddressInput' }
+            example:
+              userId: "37"
+              id: null
+              label: "Home"
+              governorate: "Gharbia"
+              details: "Tanta, El Bahr Street, Building 15, Apartment 4"
+              latitude: 30.7865
+              longitude: 31.0004
+              isDefault: false
       responses:
         '200':
           description: Saved
@@ -1541,6 +1571,10 @@ paths:
     post:
       tags: [Addresses]
       summary: Replace all user addresses
+      security: [{ bearerAuth: [] }]
+      description: |
+        يستبدل القائمة بالكامل: أي عنوان محفوظ غير موجود في `addresses` يتم حذفه.
+        بعث `id: null` للعنوان الجديد و`id` الحقيقي للتعديل، وابعث القائمة كاملة.
       requestBody:
         required: true
         content:
@@ -1557,9 +1591,10 @@ paths:
     delete:
       tags: [Addresses]
       summary: Delete address
+      security: [{ bearerAuth: [] }]
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
-        - { name: userId, in: query, required: true, schema: { type: string } }
+        - { name: userId, in: query, required: false, schema: { type: string }, description: للأدمن فقط — لغير الأدمن تتجاهل السيرفر القيمة وتستخدم هوية التوكن }
       responses:
         '200':
           description: Deleted
@@ -1808,6 +1843,7 @@ paths:
     post:
       tags: [Abandoned Carts]
       summary: Create or update abandoned cart
+      description: "يبقى متاحًا للزوار بدون توكن، والمفتاح يأتي من `userId` أو `id` في الـ body (uid أو رقم موبايل أو cart_<ts>). أما لو الطلب مصحوبًا بتوكن فيُفرض المفتاح على id حساب التوكن، فلا يمكن كتابة سلة متروكة على حساب آخر."
       requestBody:
         required: true
         content:

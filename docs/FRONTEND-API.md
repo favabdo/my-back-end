@@ -6,6 +6,7 @@ Base URL (local dev): `http://localhost:5080`
 ## القواعد العامة
 - كل الـ JSON **camelCase**.
 - المصادقة: هيدر `Authorization: Bearer <accessToken>` (صلاحية 60 دقيقة). الحسابات العادية role بتاعها `User`؛ حسابات الأدمن (محددَة بإيميلها في إعدادات السيرفر) تاخد `Admin`/`MainAdmin` وقت اللوجين.
+- **هوية العميل بتُقرأ من التوكن:** كل نقاط `/api/cart` و`/api/wishlist` و`/api/addresses` لازم معها Bearer (بدونه 401)، وقيمة `userId` في الـ body/query **لا تُستخدم** لحساب عادي — السيرفر بيشتغل على حساب التوكن نفسه. `Admin`/`MainAdmin` بس يقدر يحدد `userId` حساب تاني. الاستثناءات المتعمّدة: التقاط السلة المتروكة `/api/abandoned-carts` (POST) والشراء `/api/orders` (POST) يفضلوا متاحة للزوار بدون توكن.
 - الأخطاء: إما `{ title, status, errors? }` أو `{ errors: ["..."] }` برسائل عربية.
 - أي حاجة اسمها `productId` في الـ API ده هي **كود الصنف** `itemCode` (زي `"12668"`)، مش UUID.
 - المنتجات والتصنيفات والاستوك بتُقرأ من `EC_Products`/`EC_Groups` اللي بتتحدث من الـ ERP كل دقيقتين — أي صنف `Status=0` أو مجموعته `Status=0` لا يظهر أبدًا للعميل: لا في القوائم، ولا في الكارت، ولا في المفضلة، وإضافته للسلة أو طلبه في أوردر يرجّع 400.
@@ -80,7 +81,7 @@ Base URL (local dev): `http://localhost:5080`
 | GET | `/api/orders` | — | — | مصفوفة أوردرات كاملة، الأحدث أولًا (لوحة الأدمن) |
 | GET | `/api/orders/user/{userId}` | **Bearer** | — | أوردرات العميل ده بس — صاحبه أو Admin؛ غيرهما 403، ومن غير توكن 401 |
 | GET | `/api/orders/{id}` | **Bearer** | `id` رقم أو `ORD-...` | أوردر واحد — صاحبه (بحسابه أو بإيميله) أو Admin؛ غيرهما 403، مفقود 404 |
-| POST | `/api/orders` | — | payload الشراء (تحت — حقول إجبارية) | `{success:true, order}` أو 400 `{success:false, errors:[...]}` |
+| POST | `/api/orders` | — (زائر) / Bearer | payload الشراء (تحت — حقول إجبارية). مع توكن الأوردر بيتنسب لحساب التوكن و`userId` الـ body لا يُستخدم؛ زائر بدون توكن ياخد `userId` من الـ body | `{success:true, order}` أو 400 `{success:false, errors:[...]}` |
 | POST | `/api/orders/update-status` | **Admin** | `{orderId, newStatus, cancelReason?}` — `orderId` يقبل الرقم أو رقم الأوردر "ORD-..." | `{success, order, emailSent}` |
 | POST | `/api/orders/bulk-update-status` | **Admin** | `{orderIds:[...], newStatus, cancelReason?}` | `{success, updatedCount, orders[]}` |
 | POST | `/api/orders/update-note` | **Admin** | `{orderId, note}` | `{success, order}` + سطر history |
@@ -111,33 +112,39 @@ Base URL (local dev): `http://localhost:5080`
 | DELETE | `/api/custom-reviews/{id}` | **Admin** | — | `{success}` |
 
 ## 7) السلة (Ec_Cart — userId = اي دي الحساب، productId = كود الصنف، id = int)
-| Method | Path | Body/Params | الرد |
-|---|---|---|---|
-| GET | `/api/cart?userId=` | — | `[{id(int), productId, quantity, color, size, product:{id,itemCode,name,title,price,image,stock,groupId,category}}]` |
-| POST | `/api/cart` | `{userId, productId, quantity, color?, size?}` | `{success}` upsert بنفس مفتاح (product+color+size) — `400 {error}` لو الكود مش في الكتالوج أو موقوف (Status=0) |
-| POST | `/api/cart/sync` | `{userId, items:[{productId,quantity,color,size}]}` | `{success, replaced, removed}` — يستبدل السلة بالكامل (مضاف/محذوف/تحديث كمية) |
-| DELETE | `/api/cart/{itemId}` (int) | — | `{success}` أو `404 {error}` |
-| DELETE | `/api/cart?userId=` | — | تفريغ السلة `{success, removed}` |
+> كل النقاط دي **Bearer إجباري** (بدونه 401)، و`userId` بيتاخد من التوكن — قيمته في الـ body/query تُستخدم فقط لو المرسل `Admin`/`MainAdmin`.
+
+| Method | Path | Auth | Body/Params | الرد |
+|---|---|---|---|---|
+| GET | `/api/cart?userId=` | **Bearer** | `userId` اختياري (أدمن فقط) | `[{id(int), productId, quantity, color, size, product:{id,itemCode,name,title,price,image,stock,groupId,category}}]` |
+| POST | `/api/cart` | **Bearer** | `{userId?, productId, quantity, color?, size?}` | `{success}` upsert بنفس مفتاح (product+color+size) — `400 {error}` لو الكود مش في الكتالوج أو موقوف (Status=0) |
+| POST | `/api/cart/sync` | **Bearer** | `{userId?, items:[{productId,quantity,color,size}]}` | `{success, replaced, removed}` — يستبدل السلة بالكامل (مضاف/محذوف/تحديث كمية) |
+| DELETE | `/api/cart/{itemId}` (int) | **Bearer** | — | `{success}` أو `404 {error}` — أي صف مملوك لحساب تاني بيرجع `404` (شرط الملكية مفروض داخل استعلام SQL)؛ الأدمن بيشيل بأي id |
+| DELETE | `/api/cart?userId=` | **Bearer** | `userId` اختياري (أدمن فقط) | تفريغ السلة `{success, removed}` |
 
 > التخزين: `ProductID` = اي دي المنتج في EC_Products، و`ProductServerId` = ItemId بتاع ERP، واللوون/المقاس في عمود `Notes` كـ JSON — العقد الخارجي كما هو عدا الـ id صار number بدل GUID.
 >
 > **دورة حياة الصف (soft-delete):** حذف صنف من السلة (DELETE أو sync) بيحوّل صف `Ec_Cart` لـ `Status=0` **من غير ما يتمسح** — يفضل في الجدول و`OrderID` فاضي. لما العميل يكمل أوردر، كل صفوف سلة المرئية بتاخده `OrderID` الأوردر الجديد وبتختفي من `GET /api/cart`. يعني: `Status=0, OrderID NULL` = اتشال من السلة، `OrderID NOT NULL` = اتحول لأوردر. الإضافة لو صف مخفي بنفس المفتاح (منتج+لوون+مقاس) موجود — بيترجع نشيط بنفس الـ id بدل Duplicate.
 
 ## 8) المفضلة (Ec_WishlistItems)
-| Method | Path | Body/Params |
-|---|---|---|
-| GET | `/api/wishlist?userId=` | `[{id, productId, product:{نفس شكل الكارت}}]` — الأصناف الموقوفة (Status=0) لا تظهر |
-| POST | `/api/wishlist` | `{userId, productId}` (idempotent) |
-| POST | `/api/wishlist/sync` | `{userId, productIds:["993", ...]}` استبدال كامل |
-| DELETE | `/api/wishlist?userId=&productId=` | حذف صنف من المفضلة |
+> **Bearer إجباري** على كل النقاط (بدونه 401)، و`userId` يُقرأ من التوكن — قيمته في الطلب تُحترم فقط لو المرسل `Admin`/`MainAdmin`.
+
+| Method | Path | Auth | Body/Params |
+|---|---|---|---|
+| GET | `/api/wishlist?userId=` | **Bearer** | `[{id, productId, product:{نفس شكل الكارت}}]` — الأصناف الموقوفة (Status=0) لا تظهر |
+| POST | `/api/wishlist` | **Bearer** | `{userId?, productId}` (idempotent) — `productId` مطلوب وإلا 400 |
+| POST | `/api/wishlist/sync` | **Bearer** | `{userId?, productIds:["993", ...]}` استبدال كامل |
+| DELETE | `/api/wishlist?userId=&productId=` | **Bearer** | حذف صنف من مفضلة **المرسل نفسه** — `productId` مطلوب، وما بقيش ممكن تعدّي على قائمة حساب تاني |
 
 ## 9) العناوين (Ec_UserAddresses)
-| Method | Path | Body/Params |
-|---|---|---|
-| GET | `/api/addresses?userId=` | `[{id(GUID), userId, label, governorate, details, latitude, longitude, isDefault, createdAt}]` |
-| POST | `/api/addresses` | `{userId, id?, label, governorate, details, latitude?, longitude?, isDefault}` — id موجود = تعديل |
-| POST | `/api/addresses/sync` | `{userId, addresses:[...]}` يستبدل القائمة (اللي ملهوش id بيتعمل جديد؛ أول عنصر remaining default لو مفيش flag) |
-| DELETE | `/api/addresses/{id}?userId=` | حذف |
+> **Bearer إجباري** على كل النقاط (بدونه 401)، والمالك يُقرأ من التوكن — `userId` في الطلب يُحترم فقط لو المرسل `Admin`/`MainAdmin`.
+
+| Method | Path | Auth | Body/Params |
+|---|---|---|---|
+| GET | `/api/addresses?userId=` | **Bearer** | `[{id(GUID), userId, label, governorate, details, latitude, longitude, isDefault, createdAt}]` |
+| POST | `/api/addresses` | **Bearer** | `{userId?, id?, label, governorate, details, latitude?, longitude?, isDefault}` — `id` موجود = تعديل؛ `id` غير موجود لنفس الـ userId = **404**. للإنشاء احذف `id` أو أرسله `null` |
+| POST | `/api/addresses/sync` | **Bearer** | `{userId?, addresses:[...]}` يستبدل قائمة **عناوين المرسل نفسه** بالكامل (أي عنوان محفوظ ملهوش في القائمة **بيتحذف**؛ اللي ملهوش id بيتعمل جديد؛ أول عنصر remaining default لو مفيش flag) |
+| DELETE | `/api/addresses/{id}?userId=` | **Bearer** | حذف — عنوان حساب تاني بيرجع `404` |
 
 ## 10) الكوبونات (Ec_Coupons)
 | Method | Path | Auth | Body/Params |
@@ -175,7 +182,7 @@ Base URL (local dev): `http://localhost:5080`
 ## 14) العربة المتروكة (Ec_AbandonedCarts)
 | Method | Path | Auth | Body/Params |
 |---|---|---|---|
-| POST | `/api/abandoned-carts` | — | `{id?, userId?, customerName, customerPhone?, customerEmail?, governorate, total, items:[{name,price,quantity,image?}]}` — **idempotent**: نفس `userId`/`id` بيحدّث نفس الصف (لمسح السلة استخدم `DELETE /api/cart`) |
+| POST | `/api/abandoned-carts` | — (زائر) / Bearer | `{id?, userId?, customerName, customerPhone?, customerEmail?, governorate, total, items:[{name,price,quantity,image?}]}` — **idempotent**: نفس `userId`/`id` بيحدّث نفس الصف (لمسح السلة استخدم `DELETE /api/cart`). مع توكن: المفتاح إجباري هو `id` حساب التوكن والسيرفر بيتجاهل القيمة القادمة من الـ body؛ بدون توكن (زائر) المفتاح من الـ body زي الأول |
 | GET | `/api/abandoned-carts` | **Admin** | آخر 500 عربة مع items |
 | DELETE | `/api/abandoned-carts/{id}` | **Admin** | حذف بالـ GUID |
 

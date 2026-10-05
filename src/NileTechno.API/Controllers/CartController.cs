@@ -1,8 +1,10 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using NileTechno.Infrastructure.Services;
 
 namespace NileTechno.API.Controllers;
 
+[Authorize]
 [Route("api/cart")]
 public class CartController : ApiControllerBase
 {
@@ -11,12 +13,11 @@ public class CartController : ApiControllerBase
     public CartController(CartStore cart) => _cart = cart;
 
     [HttpGet]
-    public async Task<IActionResult> Get([FromQuery] string userId, CancellationToken ct)
+    public async Task<IActionResult> Get([FromQuery] string? userId, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(userId))
-            return Ok(new List<object>());
+        var owner = EffectiveUserId(userId);
 
-        var rows = await _cart.GetByUserAsync(userId.Trim(), ct);
+        var rows = await _cart.GetByUserAsync(owner, ct);
 
         return Ok(rows.Select(r => (object)new
         {
@@ -43,9 +44,7 @@ public class CartController : ApiControllerBase
     [HttpPost("sync")]
     public async Task<IActionResult> Sync([FromBody] CartSyncRequest body, CancellationToken ct)
     {
-        var userId = (body.UserId ?? "").Trim();
-        if (userId.Length == 0)
-            return BadRequest(new { error = "userId مطلوب" });
+        var userId = EffectiveUserId(body.UserId);
 
         var incoming = (body.Items ?? new List<CartItemRequest>())
             .Where(i => !string.IsNullOrWhiteSpace(i.ProductId))
@@ -59,10 +58,10 @@ public class CartController : ApiControllerBase
     [HttpPost]
     public async Task<IActionResult> Upsert([FromBody] CartItemRequest body, CancellationToken ct)
     {
-        var userId = (body.UserId ?? "").Trim();
+        var userId = EffectiveUserId(body.UserId);
         var productId = (body.ProductId ?? "").Trim();
-        if (userId.Length == 0 || productId.Length == 0)
-            return BadRequest(new { error = "userId و productId مطلوبان" });
+        if (productId.Length == 0)
+            return BadRequest(new { error = "productId مطلوب" });
 
         var (ok, error) = await _cart.UpsertAsync(userId,
             new CartStore.Incoming(productId, body.Quantity, body.Color ?? body.SelectedColor, body.Size ?? body.SelectedSize), ct);
@@ -73,14 +72,14 @@ public class CartController : ApiControllerBase
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
-        var removed = await _cart.DeleteAsync(id, ct);
+        var removed = await _cart.DeleteAsync(id, IsPrivileged ? null : EffectiveUserId(null), ct);
         return removed > 0 ? Ok(new { success = true }) : NotFound(new { error = "العنصر غير موجود" });
     }
 
     [HttpDelete]
-    public async Task<IActionResult> Clear([FromQuery] string userId, CancellationToken ct)
+    public async Task<IActionResult> Clear([FromQuery] string? userId, CancellationToken ct)
     {
-        var removed = await _cart.ClearAsync(userId.Trim(), ct);
+        var removed = await _cart.ClearAsync(EffectiveUserId(userId), ct);
         return Ok(new { success = true, removed });
     }
 }
