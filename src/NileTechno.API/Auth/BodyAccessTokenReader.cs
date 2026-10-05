@@ -18,14 +18,22 @@ public static class BodyAccessTokenReader
 
     public static async Task<string?> ReadAsync(HttpRequest request)
     {
-        if (request.ContentLength is null or <= 0 or > MaxBodyBytes) return null;
+        // A known oversized body is skipped; an unknown length (HTTP/2 or a proxy that drops
+        // Content-Length) must still be read, otherwise the fallback silently does nothing.
+        if (request.ContentLength > MaxBodyBytes) return null;
 
         request.EnableBuffering();
         try
         {
             using var doc = await JsonDocument.ParseAsync(request.Body);
             if (doc.RootElement.ValueKind != JsonValueKind.Object) return null;
-            return doc.RootElement.TryGetProperty("accessToken", out var value) ? value.GetString() : null;
+            if (!doc.RootElement.TryGetProperty("accessToken", out var value) || value.ValueKind != JsonValueKind.String)
+                return null;
+
+            // Hand-tested callers often paste the token with its scheme; the validator wants the bare JWT.
+            var raw = value.GetString()?.Trim();
+            if (string.IsNullOrEmpty(raw)) return null;
+            return raw.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) ? raw[7..].Trim() : raw;
         }
         catch (JsonException)
         {
