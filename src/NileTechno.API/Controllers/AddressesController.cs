@@ -30,7 +30,7 @@ public class AddressesController : ApiControllerBase
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] AddressInput body, CancellationToken ct)
     {
-        var userId = TokenUserId;
+        var userId = EffectiveUserId(body.UserId);
         var address = new UserAddress { UserId = userId };
         _db.UserAddresses.Add(address);
         Apply(address, body);
@@ -52,7 +52,7 @@ public class AddressesController : ApiControllerBase
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Update(Guid id, [FromBody] AddressInput body, CancellationToken ct)
     {
-        var userId = TokenUserId;
+        var userId = EffectiveUserId(body.UserId);
         var address = await _db.UserAddresses.FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId, ct);
         if (address is null)
             return NotFound(new { error = "العنوان غير موجود" });
@@ -103,16 +103,16 @@ public class AddressesController : ApiControllerBase
 
 
     [HttpPut("sync")]
-    public async Task<IActionResult> Sync([FromBody] List<AddressRequest> addresses, CancellationToken ct)
-        => await SaveAll(addresses, ct);
+    public async Task<IActionResult> Sync([FromQuery] string? userId, [FromBody] List<AddressRequest> addresses, CancellationToken ct)
+        => await SaveAll(userId, addresses, ct);
 
     [HttpPost("sync")]
     public async Task<IActionResult> SyncPost([FromBody] AddressSyncRequest body, CancellationToken ct)
-        => await SaveAll(body.Addresses, ct);
+        => await SaveAll(body.UserId, body.Addresses, ct);
 
-    private async Task<IActionResult> SaveAll(List<AddressRequest>? addresses, CancellationToken ct)
+    private async Task<IActionResult> SaveAll(string? userIdRaw, List<AddressRequest>? addresses, CancellationToken ct)
     {
-        var userId = TokenUserId;
+        var userId = EffectiveUserId(userIdRaw);
 
         var incoming = addresses ?? new List<AddressRequest>();
         var keepIds = incoming.Where(a => a.Id is Guid g && g != Guid.Empty).Select(a => a.Id!.Value).ToHashSet();
@@ -174,11 +174,13 @@ public class AddressesController : ApiControllerBase
 
 public class AddressSyncRequest
 {
+    public string? UserId { get; set; }
     public List<AddressRequest>? Addresses { get; set; }
 }
 
 public class AddressInput
 {
+    public string? UserId { get; set; }
     public string? Label { get; set; }
     public string? Governorate { get; set; }
     public string? Details { get; set; }

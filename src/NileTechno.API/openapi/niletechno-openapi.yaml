@@ -545,9 +545,10 @@ components:
 
     AddressInput:
       type: object
-      required: [label, governorate, details, isDefault]
-      description: لا يُرسل أي معرّف — الـ id يولّده SQL (NEWSEQUENTIALID)، والعميل صاحب العنوان يُقرأ من التوكن.
+      required: [userId, label, governorate, details, isDefault]
+      description: لا يُرسل `id` — الـ id يولّده SQL (NEWSEQUENTIALID)، والتعديل بـ `PUT /api/addresses/{id}`.
       properties:
+        userId: { type: string, description: اي دي حساب العميل (نص زي "37"). لحساب عادي السيرفر بيستخدم هوية التوكن؛ القيمة دي بتتقبل فقط من Admin/MainAdmin }
         label: { type: string }
         governorate: { type: string }
         details: { type: string }
@@ -564,8 +565,9 @@ components:
 
     AddressSyncRequest:
       type: object
-      required: [addresses]
+      required: [userId, addresses]
       properties:
+        userId: { type: string, description: اي دي حساب العميل. لحساب عادي هوية التوكن هي اللي بتشتغل؛ القيمة دي بتتقبل فقط من Admin/MainAdmin }
         addresses:
           type: array
           items: { $ref: '#/components/schemas/AddressSyncItem' }
@@ -1541,14 +1543,16 @@ paths:
       summary: Create address
       security: [{ bearerAuth: [] }]
       description: |
-        إنشاء عنوان لحساب التوكن. لا يُرسل `id` ولا `userId`: الـ id يولّده SQL،
-        وصاحب العنوان يُقرأ من التوكن. أول عنوان في الحساب يبقى default تلقائيًا.
+        إنشاء عنوان. `id` لا يُرسل: الـ id يولّده SQL، والتعديل على `PUT /api/addresses/{id}`.
+        العنوان بيتسجل لصاحب التوكن؛ `userId` في الـ body بيشتغل فقط لو المرسل Admin/MainAdmin.
+        أول عنوان في الحساب يبقى default تلقائيًا.
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: '#/components/schemas/AddressInput' }
             example:
+              userId: "37"
               label: "Home"
               governorate: "Gharbia"
               details: "Tanta, El Bahr Street, Building 15, Apartment 4"
@@ -1610,7 +1614,7 @@ paths:
       tags: [Addresses]
       summary: Update address
       security: [{ bearerAuth: [] }]
-      description: تعديل عنوان مملوك لحساب التوكن. لا يوجد معامل `userId` هنا — الكتابة دايمًا على حساب المرسل نفسه، وعنوان حساب آخر يرجع 404.
+      description: تعديل عنوان مملوك لحساب التوكن — `userId` في الـ body يُحترم فقط من Admin/MainAdmin، وعنوان حساب آخر يرجع 404. الـ id من المسار وليس من الـ body.
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
       requestBody:
@@ -1619,6 +1623,7 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/AddressInput' }
             example:
+              userId: "37"
               label: "Home"
               governorate: "Gharbia"
               details: "Tanta, El Bahr Street, Building 15, Apartment 4"

@@ -137,15 +137,15 @@ Base URL (local dev): `http://localhost:5080`
 | DELETE | `/api/wishlist?userId=&productId=` | **Bearer** | حذف صنف من مفضلة **المرسل نفسه** — `productId` مطلوب، وما بقيش ممكن تعدّي على قائمة حساب تاني |
 
 ## 9) العناوين (Ec_UserAddresses)
-> **Bearer إجباري** على كل النقاط (بدونه 401). **مفيش `id` ولا `userId` في الـ body**: الـ id بيولّده SQL (`NEWSEQUENTIALID`)، وصاحب العنوان بيتقري من التوكن. `userId` في الـ query بيشتغل فقط لو المرسل `Admin`/`MainAdmin` وده للقراءة/الحذف.
+> **Bearer إجباري** على كل النقاط (بدونه 401). **`userId` بيتبعت**: للحساب العادي السيرفر بيشتغل على هوية التوكن وبيتجاهل القيمة، والقيمة تُحترم فقط لو المرسل `Admin`/`MainAdmin`. **مفيش `id` في body الإنشاء**: الـ id بيولّده SQL (`NEWSEQUENTIALID`)، والتعديل بـ `PUT /api/addresses/{id}`.
 
 | Method | Path | Auth | Body/Params |
 |---|---|---|---|
 | GET | `/api/addresses?userId=` | **Bearer** | `[{id(GUID), userId, label, governorate, details, latitude, longitude, isDefault, createdAt}]` |
-| POST | `/api/addresses` | **Bearer** | `{label, governorate, details, latitude?, longitude?, isDefault}` → `{success, address}`. أول عنوان في الحساب بياخد `isDefault:true` لوحده حتى لو الطلب false |
+| POST | `/api/addresses` | **Bearer** | `{userId, label, governorate, details, latitude?, longitude?, isDefault}` → `{success, address}`. أول عنوان في الحساب بياخد `isDefault:true` لوحده حتى لو الطلب false |
 | PUT | `/api/addresses/{id}` | **Bearer** | نفس body الإنشاء. عنوان حساب تاني = **404** |
-| POST | `/api/addresses/sync` | **Bearer** | `{addresses:[{id?, label, governorate, details, latitude?, longitude?, isDefault}]}` يستبدل عناوين **حسابك** بالكامل (أي عنوان محفوظ ملهوش في القائمة **بيتحذف**؛ `id:null` = جديد؛ أول عنصر remaining default لو مفيش flag) |
-| PUT | `/api/addresses/sync` | **Bearer** | نفس اللى فوق لكن الـ body مصفوفة مباشرة بدون غلاف `{addresses}` |
+| POST | `/api/addresses/sync` | **Bearer** | `{userId, addresses:[{id?, label, governorate, details, latitude?, longitude?, isDefault}]}` يستبدل عناوين **حسابك** بالكامل (أي عنوان محفوظ ملهوش في القائمة **بيتحذف**؛ `id:null` = جديد؛ أول عنصر remaining default لو مفيش flag) |
+| PUT | `/api/addresses/sync?userId=` | **Bearer** | نفس اللى فوق لكن الـ body مصفوفة مباشرة بدون غلاف `{addresses}` |
 | DELETE | `/api/addresses/{id}?userId=` | **Bearer** | حذف — عنوان حساب تاني بيرجع `404` |
 
 ## 10) الكوبونات (Ec_Coupons)
